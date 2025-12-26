@@ -2,6 +2,8 @@ package main
 
 import (
 	"database/sql"
+	repository "db200/repositories"
+	"db200/router"
 	"fmt"
 	"log"
 	"net/http"
@@ -32,18 +34,26 @@ func main() {
 		log.Fatal(err)
 	}
 
-	// Маршруты
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprintln(w, "Hello from Go + PostgreSQL!")
-	})
+	// Создаем репозиторий
+	userRepo := repository.NewUserRepository(db)
 
-	http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
-		if err := db.Ping(); err != nil {
-			http.Error(w, "DB connection failed", http.StatusServiceUnavailable)
-			return
-		}
-		fmt.Fprintln(w, "OK")
-	})
+	// Создаем роутер
+	r := router.NewRouter(userRepo)
+
+	/*
+		// Маршруты
+		http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+			fmt.Fprintln(w, "Hello from Go + PostgreSQL!")
+		})
+
+		http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+			if err := db.Ping(); err != nil {
+				http.Error(w, "DB connection failed", http.StatusServiceUnavailable)
+				return
+			}
+			fmt.Fprintln(w, "OK")
+		})
+	*/
 
 	port := "8100"
 	if p := os.Getenv("PORT"); p != "" {
@@ -51,5 +61,6 @@ func main() {
 	}
 
 	log.Printf("Server starting on :%s", port)
-	log.Fatal(http.ListenAndServe(":"+port, nil))
+	// Используй роутер как обработчик!
+	log.Fatal(http.ListenAndServe(":"+port, r))
 }
