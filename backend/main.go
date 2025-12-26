@@ -20,6 +20,7 @@ type User struct {
 var db *sql.DB
 
 func main() {
+
 	dsn := "host=localhost port=5450 user=golang password=secret dbname=app sslmode=disable"
 	db, err := sql.Open("pgx", dsn)
 	if err != nil {
@@ -35,14 +36,62 @@ func main() {
 	if err := db.PingContext(ctx); err != nil {
 		log.Fatal("database unreachable:", err)
 	}
-	email := "john@example.com"
-	u := User{}
 
-	err = db.QueryRowContext(ctx,
-		`Select id,name,email from users where email=$1`,
-		email,
-	).Scan(&u.ID, &u.Name, &u.Email)
+	rows, err := db.QueryContext(ctx,
+		`Select id,name,email from users`,
+	)
 
-	fmt.Println(u)
+	if err != nil {
+		log.Fatal(err)
+	}
 
+	var users []User
+	defer rows.Close()
+
+	for rows.Next() {
+		var u User
+		if err := rows.Scan(&u.ID, &u.Name, &u.Email); err != nil {
+			log.Fatal(err)
+		}
+
+		users = append(users, u)
+
+	}
+
+	if err := rows.Err(); err != nil {
+		log.Fatal(err)
+	}
+
+	fmt.Println(users)
+
+	/*
+		email := "john@example.comr"
+		u := User{}
+
+		err = db.QueryRowContext(ctx,
+			`Select id,name,email from users where email=$1`,
+			email,
+		).Scan(&u.ID, &u.Name, &u.Email)
+
+		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				fmt.Println("Ошибка: пользователь не найден")
+				return
+			}
+		}
+
+		fmt.Println(u)
+	*/
+	/*
+		res, err := db.ExecContext(ctx,
+			`Insert into users (name,email) values ($1,$2)`,
+			"Василис", "auto@mail.ru",
+		)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		rows, _ := res.RowsAffected()
+		fmt.Println(rows)
+	*/
 }
