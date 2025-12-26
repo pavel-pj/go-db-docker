@@ -1,66 +1,48 @@
 package main
 
 import (
+	"context"
 	"database/sql"
-	repository "db200/repositories"
-	"db200/router"
 	"fmt"
 	"log"
-	"net/http"
-	"os"
+	"time"
 
+	_ "github.com/jackc/pgx/v5/stdlib"
 	_ "github.com/lib/pq"
 )
 
-func main() {
-	// Подключение к PostgreSQL
-	connStr := fmt.Sprintf(
-		"host=%s port=%s user=%s password=%s dbname=%s sslmode=disable",
-		os.Getenv("DB_HOST"),
-		os.Getenv("DB_PORT"),
-		os.Getenv("DB_USER"),
-		os.Getenv("DB_PASSWORD"),
-		os.Getenv("DB_NAME"),
-	)
+type User struct {
+	ID    int    `json:"id"`
+	Name  string `json:"name"`
+	Email string `json:"email"`
+}
 
-	db, err := sql.Open("postgres", connStr)
+var db *sql.DB
+
+func main() {
+	dsn := "host=localhost port=5450 user=golang password=secret dbname=app sslmode=disable"
+	db, err := sql.Open("pgx", dsn)
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer db.Close()
 
-	// Проверка подключения
-	if err := db.Ping(); err != nil {
-		log.Fatal(err)
+	// Создаём контекст с таймаутом. Если база "зависла", приложение не будет ждать бесконечно.
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	// Именно здесь устанавливается реальное соединение с базой.
+	if err := db.PingContext(ctx); err != nil {
+		log.Fatal("database unreachable:", err)
 	}
+	email := "john@example.com"
+	u := User{}
 
-	// Создаем репозиторий
-	userRepo := repository.NewUserRepository(db)
+	err = db.QueryRowContext(ctx,
+		`Select id,name,email from users where email=$1`,
+		email,
+	).Scan(&u.ID, &u.Name, &u.Email)
 
-	// Создаем роутер
-	r := router.NewRouter(userRepo)
+	fmt.Println(u)
 
-	/*
-		// Маршруты
-		http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-			fmt.Fprintln(w, "Hello from Go + PostgreSQL!")
-		})
-
-		http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
-			if err := db.Ping(); err != nil {
-				http.Error(w, "DB connection failed", http.StatusServiceUnavailable)
-				return
-			}
-			fmt.Fprintln(w, "OK")
-		})
-	*/
-
-	port := "8100"
-	if p := os.Getenv("PORT"); p != "" {
-		port = p
-	}
-
-	log.Printf("Server starting on :%s", port)
-	// Используй роутер как обработчик!
-	log.Fatal(http.ListenAndServe(":"+port, r))
 }
