@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 )
 
 // Product представляет товар каталога.
@@ -72,6 +73,39 @@ func ListProducts(ctx context.Context, db *sql.DB) ([]Product, error) {
 		err = rows.Scan(&p.ID, &p.Name, &p.Price)
 		if err != nil {
 			return products, err
+		}
+		products = append(products, p)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return products, nil
+
+}
+
+func GetRowsVariant(ctx context.Context, db *sql.DB, params []int64) ([]Product, error) {
+	var products []Product
+	marks := strings.TrimRight(strings.Repeat("?,", len(params)), ",")
+	query := fmt.Sprintf("SELECT * FROM products WHERE id IN (%s)", marks)
+
+	args := make([]interface{}, len(params))
+	for i, v := range params {
+		args[i] = v
+	}
+
+	rows, err := db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return products, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var p Product
+		err = rows.Scan(&p.ID, &p.Name, &p.Price)
+		if err != nil {
+			return nil, nil
 		}
 		products = append(products, p)
 	}

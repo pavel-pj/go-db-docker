@@ -3,9 +3,10 @@ package main
 import (
 	"context"
 	"database/sql"
-	p "db200/sql/product"
+	c "db200/sql/customer"
 	"fmt"
 	"log"
+	"time"
 
 	//_ "github.com/jackc/pgx/v5/stdlib"
 	_ "github.com/lib/pq"
@@ -32,8 +33,8 @@ func main() {
 
 	// 4. ПРЯМОЙ INSERT без всяких функций
 	fmt.Println("\n🔄 Пробую DELETE ALL...")
-	result, err := db.Exec(
-		"DELETE FROM products",
+	_, err = db.Exec(
+		"DELETE FROM customers",
 	)
 
 	if err != nil {
@@ -41,108 +42,81 @@ func main() {
 	}
 	fmt.Println("\n📋 УДАЛили ВСЕ:")
 
-	/*
-		// 3. Простой CREATE без IF NOT EXISTS
-		_, err = db.Exec(`CREATE TABLE products (
+	// 3. Простой CREATE без IF NOT EXISTS
+	_, err = db.Exec(`CREATE TABLE  IF NOT EXISTS  products (
 				id INTEGER PRIMARY KEY,
 				name TEXT NOT NULL UNIQUE,
 				price INTEGER NOT NULL
 			)`)
-
-		if err != nil {
-			log.Fatal("CREATE error:", err)
-		}
-
-		fmt.Println("✅ Таблица создана")
-	*/
-
-	// 5. Проверь что в таблице
-	rows, _ := db.Query("SELECT * FROM products")
-	defer rows.Close()
-	fmt.Println("\n📋 Содержимое таблицы:")
-	for rows.Next() {
-		var id int64
-		var name string
-		var price int64
-		rows.Scan(&id, &name, &price)
-		fmt.Printf("  ID: %d, Name: %s, Price: %d\n", id, name, price)
-	}
-
-	// 4. ПРЯМОЙ INSERT без всяких функций
-	fmt.Println("\n🔄 Пробую INSERT 1...")
-	result, err = db.Exec(
-		"INSERT INTO products (name, price) VALUES (?, ?)",
-		"TEST_122", // гарантированно уникальное
-		1000,
-	)
-
 	if err != nil {
-		log.Fatal("❌ INSERT 1 error:", err)
+		log.Fatal("CREATE products error:", err)
 	}
-
-	id, _ := result.LastInsertId()
-	fmt.Printf("✅ INSERT 1 OK, ID: %d\n", id)
-
-	// 6. Попробуй еще один INSERT (должен работать)
-	fmt.Println("\n🔄 Пробую INSERT 2...")
-	_, err = db.Exec(
-		"INSERT INTO products (name, price) VALUES (?, ?)",
-		"TEST_215", // другое имя
-		2000,
-	)
-
+	_, err = db.Exec(`DROP TABLE IF EXISTS users`)
 	if err != nil {
-		log.Fatal("❌ INSERT 2 error:", err)
+		log.Fatal("CREATE users error:", err)
 	}
-	fmt.Println("✅ INSERT 2 OK")
+
+	_, err = db.Exec(`CREATE TABLE  IF NOT EXISTS  users (
+			id INTEGER PRIMARY KEY,
+			name TEXT NOT NULL,
+			email TEXT NOT NULL UNIQUE,
+			status TEXT ,
+			age INTEGER  ,
+			started_at TIMESTAMPTZ NOT NULL
+			)`)
+	if err != nil {
+		log.Fatal("CREATE users error:", err)
+	}
+
+	_, err = db.Exec(`CREATE TABLE  IF NOT EXISTS  customers (
+			id INTEGER PRIMARY KEY,
+			email TEXT NOT NULL UNIQUE,
+			nickname TEXT,
+			age INTEGER,
+			last_login TIMESTAMP,
+			created_at TIMESTAMP NOT NULL
+		)`)
+	if err != nil {
+		log.Fatal("CREATE customers error:", err)
+	}
 
 	ctx := context.Background()
-	product, err := p.AddProduct(ctx, db, "Валера02", 244)
+	startedAt := time.Now()
+	customer, err := c.AddCustomer(ctx, db, "nome@mail.ru", nil, nil, nil, startedAt)
 	if err != nil {
-		log.Fatal("❌ INSERT 3 error:", err)
+		fmt.Println(err)
 	}
-	fmt.Println("✅ INSERT 3 OK")
-	fmt.Println(product)
-
-	// 5. Проверь что в таблице
-	rows, _ = db.Query("SELECT * FROM products")
-	defer rows.Close()
-	fmt.Println("\n📋 Содержимое таблицы:")
-	for rows.Next() {
-		var id int64
-		var name string
-		var price int64
-		rows.Scan(&id, &name, &price)
-		fmt.Printf("  ID: %d, Name: %s, Price: %d\n", id, name, price)
-	}
-
-	counts, err := p.CountProducts(ctx, db)
+	customer, err = c.AddCustomer(ctx, db, "OPPAmail.ru", nil, nil, nil, startedAt)
 	if err != nil {
-		log.Fatal("❌ SHOW error:", err)
+		fmt.Println(err)
 	}
-	fmt.Println("\n📋 Количество записей:")
-	fmt.Println(counts)
-
-	products, err := p.ListProducts(ctx, db)
+	fmt.Println(customer)
+	fmt.Println("Вызов Функции Show: ")
+	customer, err = c.GetCustomer(ctx, db, 1)
 	if err != nil {
-		log.Fatal("❌ LIST error:", err)
+		fmt.Print(err)
 	}
-	fmt.Println("✅ Записи")
-	fmt.Println(products)
+	fmt.Println(customer)
+
+	fmt.Println("Вызов Функции List: ")
+	customers, err := c.ListCustomers(ctx, db)
+	if err != nil {
+		fmt.Print(err)
+	}
+	fmt.Println(customers)
 
 	/*
-		// 6. Попробуй еще один INSERT (должен работать)
-		fmt.Println("\n🔄 Пробую INSERT 3..")
-		ctx := context.Background()
-		_, err = db.ExecContext(ctx,
-			"Insert into products (name,price) values(?,?)",
-			"ABBB01",
-			333444,
-		)
+		active := "active"
+		startedAt := time.Now()
+		_, err = u.AddUser(ctx, db, "Вася", "nome@mail.ru", &active, nil, startedAt)
 		if err != nil {
-			log.Fatal("❌ INSERT 3 error:", err)
+			fmt.Println(err)
 		}
-		fmt.Println("✅ INSERT 3 OK")
+		_, err = u.AddUser(ctx, db, "Иван Иваныч", "otto200@mail.ru", &active, nil, startedAt)
+		if err != nil {
+			fmt.Println(err)
+		}
+		u.GetAllUsers(ctx, db)
 	*/
 
 	/*if err != nil {
