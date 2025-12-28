@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 	"database/sql"
-	c "db200/sql/customer"
+	l "db200/sql/log"
 	"fmt"
 	"log"
 
@@ -33,7 +33,7 @@ func main() {
 		// 4. ПРЯМОЙ INSERT без всяких функций
 		fmt.Println("\n🔄 Пробую DELETE ALL...")
 		_, err = db.Exec(
-			"DELETE FROM customers",
+			"DELETE FROM logs",
 		)
 
 		if err != nil {
@@ -41,7 +41,6 @@ func main() {
 		}
 		fmt.Println("\n📋 УДАЛили ВСЕ:")
 	*/
-
 	// 3. Простой CREATE без IF NOT EXISTS
 	_, err = db.Exec(`CREATE TABLE  IF NOT EXISTS  products (
 				id INTEGER PRIMARY KEY,
@@ -80,27 +79,55 @@ func main() {
 		log.Fatal("CREATE customers error:", err)
 	}
 
-	ctx := context.Background()
-	fmt.Println("Вызов Функции List: ")
-	customers, err := c.ListCustomers(ctx, db)
+	_, err = db.Exec(`CREATE TABLE  IF NOT EXISTS  logs (
+		id INTEGER PRIMARY KEY,
+    level TEXT NOT NULL,
+    message TEXT NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+		)`)
 	if err != nil {
-		fmt.Print(err)
+		log.Fatal("CREATE logs error:", err)
 	}
-	fmt.Println(customers)
-	fmt.Println("Вызов Функции LoopShow: ")
+	ctx := context.Background()
+	payload := []l.LogEntry{
+		{Level: "info", Message: "boot"},
+		{Level: "error", Message: "disk full"},
+	}
+	err = l.SaveLogs(ctx, db, payload)
+	if err != nil {
+		fmt.Println(err)
+	}
+	fmt.Println("Запись прошла успешно")
+	fmt.Println("Чтение")
+	levels := []string{"info", "error"}
+	data, err := l.FetchLogsByLevels(ctx, db, levels)
+	if err != nil {
+		fmt.Println(err)
+	}
+	fmt.Println(data)
 
-	ages := []int64{6, 18, 60}
-	c.LoopShow(ctx, db, ages)
 	/*
-		startedAt := time.Now()
-		customer, err := c.AddCustomer(ctx, db, "none@mail.ru", nil, nil, nil, startedAt)
+		ctx := context.Background()
+		//fmt.Println("Вызов Функции List: ")
+		customers, err := c.ListCustomers(ctx, db)
 		if err != nil {
-			fmt.Println(err)
+			fmt.Print(err)
 		}
-		customer, err = c.AddCustomer(ctx, db, "mama@mail.ru", nil, nil, nil, startedAt)
-		if err != nil {
-			fmt.Println(err)
-		}
+		//fmt.Println(customers)
+		fmt.Println("Вызов Функции LoopShow: ")
+
+		ages := []int64{6, 18, 60}
+		c.LoopShow(ctx, db, ages)
+		/*
+			startedAt := time.Now()
+			customer, err := c.AddCustomer(ctx, db, "none@mail.ru", nil, nil, nil, startedAt)
+			if err != nil {
+				fmt.Println(err)
+			}
+			customer, err = c.AddCustomer(ctx, db, "mama@mail.ru", nil, nil, nil, startedAt)
+			if err != nil {
+				fmt.Println(err)
+			}
 	*/
 	/*
 		fmt.Println("Вызов Функции List: ")
