@@ -18,6 +18,11 @@ type Customer struct {
 	CreatedAt time.Time
 }
 
+type UserUpdate struct {
+	Email string
+	Age   int64
+}
+
 func AddCustomer(
 	ctx context.Context,
 	db *sql.DB,
@@ -145,30 +150,127 @@ func GetCustomer(ctx context.Context, db *sql.DB, id int64) (Customer, error) {
 }
 
 func ListCustomers(ctx context.Context, db *sql.DB) ([]Customer, error) {
-
 	var customers []Customer
 
 	rows, err := db.QueryContext(ctx,
-		"SELECT id,email,nickname,last_login,created_at from customers ORDER BY id",
+		"SELECT id, email, nickname, age, last_login, created_at FROM customers ORDER BY id",
 	)
 	if err != nil {
-		return customers, err
+		return nil, err
 	}
 	defer rows.Close()
+
 	for rows.Next() {
 		var c Customer
-		err := rows.Scan(&c.ID, &c.Email, &c.Nickname, &c.LastLogin, &c.CreatedAt)
-		if err != nil {
-			return []Customer{}, err
-		}
-		customers = append(customers, c)
 
+		// Просто сканируем прямо в указатели
+		// Драйвер сам установит nil для NULL значений
+		err := rows.Scan(
+			&c.ID,
+			&c.Email,
+			&c.Nickname,  // *string
+			&c.Age,       // *int64
+			&c.LastLogin, // *time.Time
+			&c.CreatedAt,
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		customers = append(customers, c)
 	}
 
 	if err = rows.Err(); err != nil {
-		return []Customer{}, err
+		return nil, err
 	}
 
-	return customers, err
+	return customers, nil
+}
+
+func LoopPrepared(ctx context.Context, db *sql.DB, toUpdate []UserUpdate) error {
+	stmt, err := db.PrepareContext(ctx,
+		"UPDATE customers set age= ? where email =?",
+	)
+
+	if err != nil {
+		return err
+	}
+
+	defer stmt.Close()
+
+	for _, v := range toUpdate {
+		_, err := stmt.ExecContext(ctx, v.Age, v.Email)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+
+}
+
+func (c Customer) String() string {
+	// Преобразуем указатели в строки
+	ageStr := "<nil>"
+	if c.Age != nil {
+		ageStr = fmt.Sprintf("%d", *c.Age)
+	}
+
+	nicknameStr := "<nil>"
+	if c.Nickname != nil {
+		nicknameStr = *c.Nickname
+	}
+
+	lastLoginStr := "<nil>"
+	if c.LastLogin != nil {
+		lastLoginStr = c.LastLogin.Format(time.RFC3339)
+	}
+
+	return fmt.Sprintf("Customer{ID:%d Email:%s Age:%s Nickname:%s LastLogin:%s CreatedAt:%v}",
+		c.ID, c.Email, ageStr, nicknameStr, lastLoginStr, c.CreatedAt)
+}
+
+func LoopShow(ctx context.Context, db *sql.DB, ages []int64) error {
+
+	stmt, err := db.PrepareContext(ctx,
+		"SELECT id,email,age from customers where age > ?",
+	)
+
+	if err != nil {
+		return err
+	}
+
+	defer stmt.Close()
+
+	for _, a := range ages {
+
+		rows, err := stmt.QueryContext(ctx, a)
+		if err != nil {
+			return err
+		}
+		fmt.Printf("Выборка для age=%d: \n", a)
+		for rows.Next() {
+			var (
+				id    int64
+				email string
+				age   *int64
+			)
+
+			rows.Scan(&id, &email, &age)
+			ageN := "<nil>"
+			if age != nil {
+				ageN = fmt.Sprintf("%d", *age)
+			}
+
+			fmt.Printf("id: %d, email:%s, age: %s\n", id, email, ageN)
+		}
+		rows.Close()
+
+		if err = rows.Err(); err != nil {
+			return err
+		}
+
+	}
+
+	return nil
 
 }

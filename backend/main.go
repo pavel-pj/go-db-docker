@@ -6,7 +6,6 @@ import (
 	c "db200/sql/customer"
 	"fmt"
 	"log"
-	"time"
 
 	//_ "github.com/jackc/pgx/v5/stdlib"
 	_ "github.com/lib/pq"
@@ -30,17 +29,18 @@ func main() {
 		log.Fatal(err)
 	}
 	defer db.Close()
+	/*
+		// 4. ПРЯМОЙ INSERT без всяких функций
+		fmt.Println("\n🔄 Пробую DELETE ALL...")
+		_, err = db.Exec(
+			"DELETE FROM customers",
+		)
 
-	// 4. ПРЯМОЙ INSERT без всяких функций
-	fmt.Println("\n🔄 Пробую DELETE ALL...")
-	_, err = db.Exec(
-		"DELETE FROM customers",
-	)
-
-	if err != nil {
-		log.Fatal("❌ DELETE error:", err)
-	}
-	fmt.Println("\n📋 УДАЛили ВСЕ:")
+		if err != nil {
+			log.Fatal("❌ DELETE error:", err)
+		}
+		fmt.Println("\n📋 УДАЛили ВСЕ:")
+	*/
 
 	// 3. Простой CREATE без IF NOT EXISTS
 	_, err = db.Exec(`CREATE TABLE  IF NOT EXISTS  products (
@@ -81,29 +81,50 @@ func main() {
 	}
 
 	ctx := context.Background()
-	startedAt := time.Now()
-	customer, err := c.AddCustomer(ctx, db, "nome@mail.ru", nil, nil, nil, startedAt)
-	if err != nil {
-		fmt.Println(err)
-	}
-	customer, err = c.AddCustomer(ctx, db, "OPPAmail.ru", nil, nil, nil, startedAt)
-	if err != nil {
-		fmt.Println(err)
-	}
-	fmt.Println(customer)
-	fmt.Println("Вызов Функции Show: ")
-	customer, err = c.GetCustomer(ctx, db, 1)
-	if err != nil {
-		fmt.Print(err)
-	}
-	fmt.Println(customer)
-
 	fmt.Println("Вызов Функции List: ")
 	customers, err := c.ListCustomers(ctx, db)
 	if err != nil {
 		fmt.Print(err)
 	}
 	fmt.Println(customers)
+	fmt.Println("Вызов Функции LoopShow: ")
+
+	ages := []int64{6, 18, 60}
+	c.LoopShow(ctx, db, ages)
+	/*
+		startedAt := time.Now()
+		customer, err := c.AddCustomer(ctx, db, "none@mail.ru", nil, nil, nil, startedAt)
+		if err != nil {
+			fmt.Println(err)
+		}
+		customer, err = c.AddCustomer(ctx, db, "mama@mail.ru", nil, nil, nil, startedAt)
+		if err != nil {
+			fmt.Println(err)
+		}
+	*/
+	/*
+		fmt.Println("Вызов Функции List: ")
+		customers, err := c.ListCustomers(ctx, db)
+		if err != nil {
+			fmt.Print(err)
+		}
+		fmt.Println(customers)
+		fmt.Println("Вызов Функции Update: ")
+
+		updates := []c.UserUpdate{
+			{Email: "nome@mail.ru", Age: 78},
+			{Email: "OPPAmail.ru", Age: 12},
+			{Email: "mama@mail.ru", Age: 25},
+		}
+
+		c.LoopPrepared(ctx, db, updates)
+		fmt.Println("Вызов Функции List: ")
+		customers, err = c.ListCustomers(ctx, db)
+		if err != nil {
+			fmt.Print(err)
+		}
+		fmt.Println(customers)
+	*/
 
 	/*
 		active := "active"
