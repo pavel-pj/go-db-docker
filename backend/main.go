@@ -29,18 +29,18 @@ func main() {
 		log.Fatal(err)
 	}
 	defer db.Close()
-	/*
-		// 4. ПРЯМОЙ INSERT без всяких функций
-		fmt.Println("\n🔄 Пробую DELETE ALL...")
-		_, err = db.Exec(
-			"DELETE FROM logs",
-		)
 
-		if err != nil {
-			log.Fatal("❌ DELETE error:", err)
-		}
-		fmt.Println("\n📋 УДАЛили ВСЕ:")
-	*/
+	// 4. ПРЯМОЙ INSERT без всяких функций
+	fmt.Println("\n🔄 Пробую DELETE ALL...")
+	_, err = db.Exec(
+		"DELETE FROM logs",
+	)
+
+	if err != nil {
+		log.Fatal("❌ DELETE error:", err)
+	}
+	fmt.Println("\n📋 УДАЛили ВСЕ:")
+
 	// 3. Простой CREATE без IF NOT EXISTS
 	_, err = db.Exec(`CREATE TABLE  IF NOT EXISTS  products (
 				id INTEGER PRIMARY KEY,
@@ -88,18 +88,27 @@ func main() {
 	if err != nil {
 		log.Fatal("CREATE logs error:", err)
 	}
+
 	ctx := context.Background()
-	payload := []l.LogEntry{
-		{Level: "info", Message: "boot"},
-		{Level: "error", Message: "disk full"},
-	}
-	err = l.SaveLogs(ctx, db, payload)
+	log1 := l.LogEntry{Level: "Abstract", Message: "AAAAA"}
+	log2 := l.LogEntry{Level: "Abstract", Message: "YES IT IS"}
+	err = l.DoubleChangeAge(ctx, db, log1, log2)
 	if err != nil {
 		fmt.Println(err)
 	}
-	fmt.Println("Запись прошла успешно")
+	/*
+		payload := []l.LogEntry{
+			{Level: "info", Message: "boot"},
+			{Level: "error", Message: "disk full"},
+		}
+		err = l.SaveLogs(ctx, db, payload)
+		if err != nil {
+			fmt.Println(err)
+		}
+		fmt.Println("Запись прошла успешно")
+	*/
 	fmt.Println("Чтение")
-	levels := []string{"info", "error"}
+	levels := []string{"info", "error", "Abstract"}
 	data, err := l.FetchLogsByLevels(ctx, db, levels)
 	if err != nil {
 		fmt.Println(err)

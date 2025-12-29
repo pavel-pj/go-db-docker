@@ -81,3 +81,80 @@ func FetchLogsByLevels(ctx context.Context, db *sql.DB, levels []string) (map[st
 	return logs, nil
 
 }
+
+func DoubleChangeAge(ctx context.Context, db *sql.DB, log1 LogEntry, log2 LogEntry) error {
+
+	err := withTx(ctx, db, func(tx *sql.Tx) error {
+		_, err := tx.ExecContext(ctx,
+			"INSERT INTO logs (level,message) values(?,?)",
+			log1.Level, log1.Message,
+		)
+		if err != nil {
+			return err
+		}
+		_, err = tx.ExecContext(ctx,
+			"INSERT INTO logs (level,message) values(?,?)",
+			log2.Level, log2.Message,
+		)
+		if err != nil {
+			return err
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		return fmt.Errorf("Error: %w", err)
+	}
+
+	return nil
+
+	/*
+		tx, err := db.BeginTx(ctx, &sql.TxOptions{
+			Isolation: sql.LevelReadCommitted,
+		})
+
+		if err != nil {
+			return err
+		}
+
+		defer tx.Rollback()
+
+		_, err = tx.ExecContext(ctx,
+			"INSERT INTO logs (level,message) values(?,?)",
+			log1.Level, log1.Message,
+		)
+		if err != nil {
+			return err
+		}
+		_, err = tx.ExecContext(ctx,
+			"INSERT INTO logs (level,message) values(?,?)",
+			log2.Level, log2.Message,
+		)
+		if err != nil {
+			return err
+		}
+		if err = tx.Commit(); err != nil {
+			return err
+		}
+
+		return nil
+	*/
+}
+
+func withTx(ctx context.Context, db *sql.DB, fn func(*sql.Tx) error) error {
+	tx, err := db.BeginTx(ctx, &sql.TxOptions{
+		Isolation: sql.LevelReadCommitted,
+	})
+
+	if err != nil {
+		return err
+	}
+
+	defer tx.Rollback()
+	if err = fn(tx); err != nil {
+		return err
+	}
+
+	return tx.Commit()
+}
