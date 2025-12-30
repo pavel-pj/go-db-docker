@@ -8,7 +8,7 @@ RUN apk add --no-cache curl tar postgresql-client && \
     chmod +x /usr/local/bin/migrate
 
 # Устанавливаем Air
-RUN go install github.com/air-verse/air@latest
+#RUN go install github.com/air-verse/air@latest
 
 # Копируем зависимости
 COPY go.mod go.sum ./
@@ -18,4 +18,5 @@ COPY . .
 
 EXPOSE 8100
 
-CMD ["air", "-c", ".air.toml"]
+#CMD ["air", "-c", ".air.toml"]
+CMD ["/bin/sh"]

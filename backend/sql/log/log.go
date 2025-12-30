@@ -90,17 +90,13 @@ func DoubleChangeAge(ctx context.Context, db *sql.DB, log1 LogEntry, log2 LogEnt
 			log1.Level, log1.Message,
 		)
 		if err != nil {
-			return err
+			return fmt.Errorf("Error: %w", err)
 		}
 		_, err = tx.ExecContext(ctx,
 			"INSERT INTO logs (level,message) values(?,?)",
 			log2.Level, log2.Message,
 		)
-		if err != nil {
-			return err
-		}
-
-		return nil
+		return err
 	})
 
 	if err != nil {
@@ -109,37 +105,6 @@ func DoubleChangeAge(ctx context.Context, db *sql.DB, log1 LogEntry, log2 LogEnt
 
 	return nil
 
-	/*
-		tx, err := db.BeginTx(ctx, &sql.TxOptions{
-			Isolation: sql.LevelReadCommitted,
-		})
-
-		if err != nil {
-			return err
-		}
-
-		defer tx.Rollback()
-
-		_, err = tx.ExecContext(ctx,
-			"INSERT INTO logs (level,message) values(?,?)",
-			log1.Level, log1.Message,
-		)
-		if err != nil {
-			return err
-		}
-		_, err = tx.ExecContext(ctx,
-			"INSERT INTO logs (level,message) values(?,?)",
-			log2.Level, log2.Message,
-		)
-		if err != nil {
-			return err
-		}
-		if err = tx.Commit(); err != nil {
-			return err
-		}
-
-		return nil
-	*/
 }
 
 func withTx(ctx context.Context, db *sql.DB, fn func(*sql.Tx) error) error {

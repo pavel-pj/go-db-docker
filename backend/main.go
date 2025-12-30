@@ -3,283 +3,179 @@ package main
 import (
 	"context"
 	"database/sql"
-	l "db200/sql/log"
+	"db200/internal/db"
 	"fmt"
 	"log"
+	"os"
+	"time"
 
-	//_ "github.com/jackc/pgx/v5/stdlib"
-	_ "github.com/lib/pq"
-	_ "modernc.org/sqlite"
+	_ "github.com/lib/pq" // драйвер PostgreSQL
+
+	"github.com/golang-migrate/migrate/v4"
+	"github.com/golang-migrate/migrate/v4/database/postgres"
+	_ "github.com/golang-migrate/migrate/v4/source/file"
 )
 
-type User struct {
-	ID    int    `json:"id"`
-	Name  string `json:"name"`
-	Email string `json:"email"`
+func main() {
+
+	dbConn, err := dbInit()
+	if err != nil {
+		log.Fatalf("❌ Ошибка подключения к БД: %v", err)
+	}
+	defer dbConn.Close()
+	log.Println("✅ Успешное подключение к БД")
+
+	// Создаем экземпляр Queries из sqlc
+	queries := db.New(dbConn)
+	ctx := context.Background()
+
+	products, err := queries.GetProducts(ctx)
+	if err != nil {
+		log.Printf("❌ ОШИБКА: %v", err)
+	} else {
+
+		fmt.Println(products)
+	}
+
+	/*
+			product, err := queries.CreateProduct(ctx, db.CreateProductParams{
+				Name:   "Компьютер",
+				Price:  155,
+				Status: "NEW",
+			})
+
+			if err != nil {
+				log.Printf("❌ ОШИБКА: %v", err)
+			} else {
+				log.Printf("✅ Запись Товара: ID=%d\n", product.ID)
+				fmt.Println(product)
+			}
+		product, err := queries.GetProduct(ctx, 2)
+		if err != nil {
+			log.Printf("❌ ОШИБКА: %v", err)
+		} else {
+			log.Printf("✅ Запись Товара: ID=%d\n", product.ID)
+			fmt.Println(product)
+		}
+	*/
+
+	/*
+			user, err := queries.CreateUser(ctx, db.CreateUserParams{
+				Name:  "Валера Киношников",
+				Email: "noneus@mail.ru",
+			})
+
+			if err != nil {
+				log.Printf("❌ ОШИБКА: %v", err)
+			} else {
+				log.Printf("✅ Запись юзера: ID=%d", user.ID)
+			}
+
+
+		user, err := queries.GetUserByEmail(ctx, "noneus@mail.ru")
+		if err != nil {
+			log.Printf("❌ ОШИБКА: %v", err)
+		} else {
+			log.Println(user)
+		}
+	*/
+
 }
 
-//var db *sql.DB
+func dbInit() (*sql.DB, error) {
+	// Получаем переменные окружения
+	dbHost := getEnv("DB_HOST", "localhost")
+	dbPort := getEnv("DB_PORT", "5432")
+	dbUser := getEnv("DB_USER", "golang")
+	dbPassword := getEnv("DB_PASSWORD", "secret")
+	dbName := getEnv("DB_NAME", "app")
 
-//ЕСЛИ НЕТ СЕРВЕРА ТО ЗАПУСКАТЬ go run main.go
-
-func main() {
-	db, err := sql.Open("sqlite", "./test.db")
-
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer db.Close()
-
-	// 4. ПРЯМОЙ INSERT без всяких функций
-	fmt.Println("\n🔄 Пробую DELETE ALL...")
-	_, err = db.Exec(
-		"DELETE FROM logs",
+	// Формируем connection string
+	connStr := fmt.Sprintf(
+		"host=%s port=%s user=%s password=%s dbname=%s sslmode=disable",
+		dbHost, dbPort, dbUser, dbPassword, dbName,
 	)
 
+	//log.Printf("🔗 Connecting to PostgreSQL: %s:%s/%s", dbHost, dbPort, dbName)
+
+	// Подключаемся к БД
+	dbConn, err := sql.Open("postgres", connStr)
 	if err != nil {
-		log.Fatal("❌ DELETE error:", err)
-	}
-	fmt.Println("\n📋 УДАЛили ВСЕ:")
-
-	// 3. Простой CREATE без IF NOT EXISTS
-	_, err = db.Exec(`CREATE TABLE  IF NOT EXISTS  products (
-				id INTEGER PRIMARY KEY,
-				name TEXT NOT NULL UNIQUE,
-				price INTEGER NOT NULL
-			)`)
-	if err != nil {
-		log.Fatal("CREATE products error:", err)
-	}
-	_, err = db.Exec(`DROP TABLE IF EXISTS users`)
-	if err != nil {
-		log.Fatal("CREATE users error:", err)
+		return nil, fmt.Errorf("failed to open database: %w", err)
 	}
 
-	_, err = db.Exec(`CREATE TABLE  IF NOT EXISTS  users (
-			id INTEGER PRIMARY KEY,
-			name TEXT NOT NULL,
-			email TEXT NOT NULL UNIQUE,
-			status TEXT ,
-			age INTEGER  ,
-			started_at TIMESTAMPTZ NOT NULL
-			)`)
-	if err != nil {
-		log.Fatal("CREATE users error:", err)
+	// Настройка пула соединений
+	dbConn.SetMaxOpenConns(25)
+	dbConn.SetMaxIdleConns(25)
+	dbConn.SetConnMaxLifetime(5 * time.Minute)
+
+	// Проверяем соединение с таймаутом
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if err := dbConn.PingContext(ctx); err != nil {
+		dbConn.Close() // Закрываем при ошибке ping
+		return nil, fmt.Errorf("database not reachable: %w", err)
 	}
 
-	_, err = db.Exec(`CREATE TABLE  IF NOT EXISTS  customers (
-			id INTEGER PRIMARY KEY,
-			email TEXT NOT NULL UNIQUE,
-			nickname TEXT,
-			age INTEGER,
-			last_login TIMESTAMP,
-			created_at TIMESTAMP NOT NULL
-		)`)
-	if err != nil {
-		log.Fatal("CREATE customers error:", err)
+	//log.Println("✅ Connected to PostgreSQL")
+
+	// Запуск миграций
+	if err := runMigrations(dbConn); err != nil {
+		dbConn.Close() // Закрываем при ошибке миграций
+		return nil, fmt.Errorf("migrations failed: %w", err)
 	}
 
-	_, err = db.Exec(`CREATE TABLE  IF NOT EXISTS  logs (
-		id INTEGER PRIMARY KEY,
-    level TEXT NOT NULL,
-    message TEXT NOT NULL,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-		)`)
-	if err != nil {
-		log.Fatal("CREATE logs error:", err)
-	}
-
-	ctx := context.Background()
-	log1 := l.LogEntry{Level: "Abstract", Message: "AAAAA"}
-	log2 := l.LogEntry{Level: "Abstract", Message: "YES IT IS"}
-	err = l.DoubleChangeAge(ctx, db, log1, log2)
-	if err != nil {
-		fmt.Println(err)
-	}
-	/*
-		payload := []l.LogEntry{
-			{Level: "info", Message: "boot"},
-			{Level: "error", Message: "disk full"},
-		}
-		err = l.SaveLogs(ctx, db, payload)
-		if err != nil {
-			fmt.Println(err)
-		}
-		fmt.Println("Запись прошла успешно")
-	*/
-	fmt.Println("Чтение")
-	levels := []string{"info", "error", "Abstract"}
-	data, err := l.FetchLogsByLevels(ctx, db, levels)
-	if err != nil {
-		fmt.Println(err)
-	}
-	fmt.Println(data)
-
-	/*
-		ctx := context.Background()
-		//fmt.Println("Вызов Функции List: ")
-		customers, err := c.ListCustomers(ctx, db)
-		if err != nil {
-			fmt.Print(err)
-		}
-		//fmt.Println(customers)
-		fmt.Println("Вызов Функции LoopShow: ")
-
-		ages := []int64{6, 18, 60}
-		c.LoopShow(ctx, db, ages)
-		/*
-			startedAt := time.Now()
-			customer, err := c.AddCustomer(ctx, db, "none@mail.ru", nil, nil, nil, startedAt)
-			if err != nil {
-				fmt.Println(err)
-			}
-			customer, err = c.AddCustomer(ctx, db, "mama@mail.ru", nil, nil, nil, startedAt)
-			if err != nil {
-				fmt.Println(err)
-			}
-	*/
-	/*
-		fmt.Println("Вызов Функции List: ")
-		customers, err := c.ListCustomers(ctx, db)
-		if err != nil {
-			fmt.Print(err)
-		}
-		fmt.Println(customers)
-		fmt.Println("Вызов Функции Update: ")
-
-		updates := []c.UserUpdate{
-			{Email: "nome@mail.ru", Age: 78},
-			{Email: "OPPAmail.ru", Age: 12},
-			{Email: "mama@mail.ru", Age: 25},
-		}
-
-		c.LoopPrepared(ctx, db, updates)
-		fmt.Println("Вызов Функции List: ")
-		customers, err = c.ListCustomers(ctx, db)
-		if err != nil {
-			fmt.Print(err)
-		}
-		fmt.Println(customers)
-	*/
-
-	/*
-		active := "active"
-		startedAt := time.Now()
-		_, err = u.AddUser(ctx, db, "Вася", "nome@mail.ru", &active, nil, startedAt)
-		if err != nil {
-			fmt.Println(err)
-		}
-		_, err = u.AddUser(ctx, db, "Иван Иваныч", "otto200@mail.ru", &active, nil, startedAt)
-		if err != nil {
-			fmt.Println(err)
-		}
-		u.GetAllUsers(ctx, db)
-	*/
-
-	/*if err != nil {
-		log.Fatal(err)
-	}
-	defer db.Close()
-
-	// Проверка подключения
-	err = db.Ping()
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	fmt.Println("✅ Подключено к SQLite!")
-	/*
-		// Создание таблицы
-		_, err = db.Exec(`
-					CREATE TABLE IF NOT EXISTS products(
-					id INTEGER PRIMARY KEY,
-			    name TEXT NOT NULL UNIQUE,
-			    price INTEGER NOT NULL
-					)
-				`)
-		if err != nil {
-			log.Fatal(err)
-		}
-
-	ctx := context.Background()
-	prod, err := p.AddProduct(ctx, db, "AA", 70000)
-	if err != nil {
-		log.Fatal(err)
-	}
-	fmt.Println(prod)
-
-	/*
-		dsn := "host=localhost port=5450 user=golang password=secret dbname=app sslmode=disable"
-		db, err := sql.Open("pgx", dsn)
-		if err != nil {
-			log.Fatal(err)
-		}
-		defer db.Close()
-
-		// Создаём контекст с таймаутом. Если база "зависла", приложение не будет ждать бесконечно.
-		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-		defer cancel()
-
-		// Именно здесь устанавливается реальное соединение с базой.
-		if err := db.PingContext(ctx); err != nil {
-			log.Fatal("database unreachable:", err)
-		}*/
-
-	/*
-		rows, err := db.QueryContext(ctx,
-			`Select id,name,email from users`,
-		)
-
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		var users []User
-
-		for rows.Next() {
-			var u User
-			if err := rows.Scan(&u.ID, &u.Name, &u.Email); err != nil {
-				log.Fatal(err)
-			}
-
-			users = append(users, u)
-
-		}
-
-		if err := rows.Err(); err != nil {
-			log.Fatal(err)
-		}
-
-		fmt.Println(users)
-		/*
-
-			email := "john@example.comr"
-			u := User{}
-
-			err = db.QueryRowContext(ctx,
-				`Select id,name,email from users where email=$1`,
-				email,
-			).Scan(&u.ID, &u.Name, &u.Email)
-
-			if err != nil {
-				if errors.Is(err, sql.ErrNoRows) {
-					fmt.Println("Ошибка: пользователь не найден")
-					return
-				}
-			}
-
-			fmt.Println(u)
-	*/
-	/*
-		res, err := db.ExecContext(ctx,
-			`Insert into users (name,email) values ($1,$2)`,
-			"Василис", "auto@mail.ru",
-		)
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		rows, _ := res.RowsAffected()
-		fmt.Println(rows)
-	*/
+	return dbConn, nil
 }
+
+// Вспомогательная функция для получения переменных окружения
+func getEnv(key, defaultValue string) string {
+	if value := os.Getenv(key); value != "" {
+		return value
+	}
+	return defaultValue
+}
+
+func runMigrations(db *sql.DB) error {
+	// Создаем драйвер для миграций
+	driver, err := postgres.WithInstance(db, &postgres.Config{})
+	if err != nil {
+		return fmt.Errorf("create migration driver: %w", err)
+	}
+
+	// Создаем мигратор
+	m, err := migrate.NewWithDatabaseInstance(
+		"file://database/migrations", // путь к миграциям
+		"postgres",                   // имя базы
+		driver,
+	)
+	if err != nil {
+		return fmt.Errorf("create migrator: %w", err)
+	}
+
+	// Запускаем миграции вверх
+	if err := m.Up(); err != nil && err != migrate.ErrNoChange {
+		return fmt.Errorf("run migrations up: %w", err)
+	}
+
+	//log.Println("✅ Migrations applied successfully")
+
+	return nil
+}
+
+/*
+// Обработчик для /api/users (GET и POST)
+func usersHandler(q *db.Queries) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		//case http.MethodGet:
+		//handlers.ListUsersHandler(q)(w, r)
+		case http.MethodPost:
+			handlers.CreateUserHandler(q)(w, r)
+		default:
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		}
+	}
+}
+*/
