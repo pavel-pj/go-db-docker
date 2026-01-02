@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 	"database/sql"
-	"db200/internal/db"
+	paymentsdb "db200/internal/db/payments"
 	"fmt"
 	"log"
 	"os"
@@ -26,37 +26,70 @@ func main() {
 	log.Println("✅ Успешное подключение к БД")
 
 	// Создаем экземпляр Queries из sqlc
-	queries := db.New(dbConn)
+	queries := paymentsdb.New(dbConn)
 	ctx := context.Background()
+	/*
+		result, err := queries.CreatePayment(ctx, paymentsdb.CreatePaymentParams{
+			InvoiceID:   "inv-42",
+			AmountCents: 9900,
+			Status:      "pending",
+		})
+	*/
 
-	products, err := queries.GetProducts(ctx)
+	result, err := queries.SetPaymentStatus(ctx, paymentsdb.SetPaymentStatusParams{
+		Status: "paid",
+		ID:     1,
+	})
+
 	if err != nil {
-		log.Printf("❌ ОШИБКА: %v", err)
+		fmt.Println(err)
 	} else {
-
-		fmt.Println(products)
+		fmt.Println(result)
 	}
 
 	/*
-			product, err := queries.CreateProduct(ctx, db.CreateProductParams{
-				Name:   "Компьютер",
-				Price:  155,
-				Status: "NEW",
-			})
+		result, err := queries.CreateUser(ctx, userDb.CreateUserParams{
+			Email: "Nunuee@mail.ru",
+			Name:  "FUFA",
+		})
+		if err != nil {
+			fmt.Println(err)
+		} else {
+			fmt.Println(result)
+		}
 
+		err = queries.UpdateUserName(ctx, userDb.UpdateUserNameParams{Name: "ЧЕБУРАКА", ID: 1})
+		if err != nil {
+			fmt.Println(err)
+		} else {
+			fmt.Println("Обновлено")
+		}
+
+		res, err := queries.DeleteUser(ctx, 4)
+		if err != nil {
+			fmt.Println(err)
+		} else {
+			fmt.Println(res)
+		}
+
+		/*
+			// 2. Создать продукт БЕЗ цены
+			_, err = queries.CreateProduct(ctx, productsdb.CreateProductParams{
+				Name:   "Компьютер",
+				Status: "Active",
+				Price:  sql.NullInt32{Int32: 2988, Valid: true},
+			})
+			if err != nil {
+				log.Printf("❌ ОШИБКА: %v", err)
+			}
+
+			products, err := queries.GetProducts(ctx)
 			if err != nil {
 				log.Printf("❌ ОШИБКА: %v", err)
 			} else {
-				log.Printf("✅ Запись Товара: ID=%d\n", product.ID)
-				fmt.Println(product)
+
+				fmt.Println(products)
 			}
-		product, err := queries.GetProduct(ctx, 2)
-		if err != nil {
-			log.Printf("❌ ОШИБКА: %v", err)
-		} else {
-			log.Printf("✅ Запись Товара: ID=%d\n", product.ID)
-			fmt.Println(product)
-		}
 	*/
 
 	/*

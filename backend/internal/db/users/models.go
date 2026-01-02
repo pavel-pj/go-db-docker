@@ -2,20 +2,11 @@
 // versions:
 //   sqlc v1.30.0
 
-package db
+package usersdb
 
 import (
 	"database/sql"
 )
-
-type Product struct {
-	ID        int32
-	Name      string
-	Price     int32
-	Status    string
-	CreatedAt sql.NullTime
-	UpdatedAt sql.NullTime
-}
 
 type User struct {
 	ID        int32

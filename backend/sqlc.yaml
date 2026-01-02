@@ -2,10 +2,25 @@ version: "2"
 
 sql:
   - engine: "postgresql"   
-    schema: "schema"
-    queries: "queries"
+    schema: "schema/products"
+    queries: "queries/products"
     gen:
       go:
-        package: "db"
-        out: "internal/db"
-        sql_package: "database/sql"  
+        package: "productsdb"
+        out: "internal/db/products"
+        #sql_package: "database/sql"  
+  - engine: "postgresql"   
+    schema: "schema/users"
+    queries: "queries/users"
+    gen:
+      go:
+        package: "usersdb"
+        out: "internal/db/users"
+  - engine: "postgresql"   
+    schema: "schema/payments"
+    queries: "queries/payments"
+    gen:
+      go:
+        package: "paymentsdb"
+        out: "internal/db/payments"
+     
