@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 	"database/sql"
-	paymentsdb "db200/internal/db/payments"
+	"embed"
 	"fmt"
 	"log"
 	"os"
@@ -16,6 +16,9 @@ import (
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 )
 
+//go:embed database/migrations
+var migrationsFS embed.FS
+
 func main() {
 
 	dbConn, err := dbInit()
@@ -26,8 +29,12 @@ func main() {
 	log.Println("✅ Успешное подключение к БД")
 
 	// Создаем экземпляр Queries из sqlc
-	queries := paymentsdb.New(dbConn)
-	ctx := context.Background()
+	//queries := paymentsdb.New(dbConn)
+	//ctx := context.Background()
+
+	data, _ := migrationsFS.ReadFile("001_create_users.down.sql")
+	fmt.Println(string(data))
+
 	/*
 		result, err := queries.CreatePayment(ctx, paymentsdb.CreatePaymentParams{
 			InvoiceID:   "inv-42",
@@ -35,61 +42,61 @@ func main() {
 			Status:      "pending",
 		})
 	*/
-
-	result, err := queries.SetPaymentStatus(ctx, paymentsdb.SetPaymentStatusParams{
-		Status: "paid",
-		ID:     1,
-	})
-
-	if err != nil {
-		fmt.Println(err)
-	} else {
-		fmt.Println(result)
-	}
-
 	/*
-		result, err := queries.CreateUser(ctx, userDb.CreateUserParams{
-			Email: "Nunuee@mail.ru",
-			Name:  "FUFA",
+		result, err := queries.SetPaymentStatus(ctx, paymentsdb.SetPaymentStatusParams{
+			Status: "paid",
+			ID:     1,
 		})
+
 		if err != nil {
 			fmt.Println(err)
 		} else {
 			fmt.Println(result)
 		}
 
-		err = queries.UpdateUserName(ctx, userDb.UpdateUserNameParams{Name: "ЧЕБУРАКА", ID: 1})
-		if err != nil {
-			fmt.Println(err)
-		} else {
-			fmt.Println("Обновлено")
-		}
-
-		res, err := queries.DeleteUser(ctx, 4)
-		if err != nil {
-			fmt.Println(err)
-		} else {
-			fmt.Println(res)
-		}
-
 		/*
-			// 2. Создать продукт БЕЗ цены
-			_, err = queries.CreateProduct(ctx, productsdb.CreateProductParams{
-				Name:   "Компьютер",
-				Status: "Active",
-				Price:  sql.NullInt32{Int32: 2988, Valid: true},
+			result, err := queries.CreateUser(ctx, userDb.CreateUserParams{
+				Email: "Nunuee@mail.ru",
+				Name:  "FUFA",
 			})
 			if err != nil {
-				log.Printf("❌ ОШИБКА: %v", err)
-			}
-
-			products, err := queries.GetProducts(ctx)
-			if err != nil {
-				log.Printf("❌ ОШИБКА: %v", err)
+				fmt.Println(err)
 			} else {
-
-				fmt.Println(products)
+				fmt.Println(result)
 			}
+
+			err = queries.UpdateUserName(ctx, userDb.UpdateUserNameParams{Name: "ЧЕБУРАКА", ID: 1})
+			if err != nil {
+				fmt.Println(err)
+			} else {
+				fmt.Println("Обновлено")
+			}
+
+			res, err := queries.DeleteUser(ctx, 4)
+			if err != nil {
+				fmt.Println(err)
+			} else {
+				fmt.Println(res)
+			}
+
+			/*
+				// 2. Создать продукт БЕЗ цены
+				_, err = queries.CreateProduct(ctx, productsdb.CreateProductParams{
+					Name:   "Компьютер",
+					Status: "Active",
+					Price:  sql.NullInt32{Int32: 2988, Valid: true},
+				})
+				if err != nil {
+					log.Printf("❌ ОШИБКА: %v", err)
+				}
+
+				products, err := queries.GetProducts(ctx)
+				if err != nil {
+					log.Printf("❌ ОШИБКА: %v", err)
+				} else {
+
+					fmt.Println(products)
+				}
 	*/
 
 	/*

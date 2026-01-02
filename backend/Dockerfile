@@ -7,8 +7,13 @@ RUN apk add --no-cache curl tar postgresql-client && \
     mv migrate /usr/local/bin/migrate && \
     chmod +x /usr/local/bin/migrate
 
+RUN go install github.com/pressly/goose/v3/cmd/goose@latest
+
 # Устанавливаем Air
 #RUN go install github.com/air-verse/air@latest
+
+COPY scripts/migrate.sh /usr/local/bin/migrate
+RUN chmod +x /usr/local/bin/migrate
 
 # Копируем зависимости
 COPY go.mod go.sum ./
