@@ -2,11 +2,18 @@ package main
 
 import (
 	"fmt"
+	"io"
+	"log"
+	"math"
+	"math/big"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strconv"
 	"time"
 
 	_ "github.com/lib/pq" // драйвер PostgreSQL
+	"github.com/sirupsen/logrus"
 
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 )
@@ -19,9 +26,19 @@ var courses = map[int64]string{
 
 func main() {
 
+	cwd, _ := os.Getwd()
+	logFile := filepath.Join(cwd, ".log")
+	logger := logrus.New()
+	logger.SetOutput(os.Stdout)
+	file, err := os.OpenFile(logFile, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0755)
+	if err != nil {
+		logger.Fatal(err)
+	}
+	defer file.Close()
+
+	logger.SetOutput(io.MultiWriter(os.Stdout, file))
+
 	mux := http.NewServeMux()
-	mux.HandleFunc("/", IndexHandler)
-	mux.HandleFunc("/courses/description", CourseDescHandler)
 
 	server := &http.Server{
 		Addr:              ":8100",
@@ -29,16 +46,50 @@ func main() {
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 
-	err := server.ListenAndServe()
-	if err != nil {
-		panic(err)
-	}
+	mux.HandleFunc("/", IndexHandler)
+	mux.HandleFunc("/courses/description", CourseDescHandler)
+	mux.HandleFunc("/sum", SumHandler(logger))
+
+	port := "8100"
+	logWithPort := logrus.WithFields(logrus.Fields{
+		"port": port,
+	})
+	logWithPort.Info("Starting a web-server on port")
+	logWithPort.Fatal(server.ListenAndServe())
+
+	/*
+		port := "8100"
+		server := &http.Server{
+			Addr:              ":" + port,
+			Handler:           mux,
+			ReadHeaderTimeout: 10 * time.Second,
+		}
+
+		// Дополнительная информация передается функцией WithFields
+		logrus.WithFields(logrus.Fields{
+			"port": port,
+		}).Info("Starting a web-server on port")
+		logrus.Fatal(server.ListenAndServe())
+		/*
+			err := server.ListenAndServe()
+			if err != nil {
+				panic(err)
+			}
+
+			/*
+				port := "8100"
+
+				log.Println("Starting a web-server on port " + port)
+				log.Fatal(http.ListenAndServe(":"+port, nil))*/
 
 	//http.ListenAndServe(":8100", nil)
 }
 
 func IndexHandler(w http.ResponseWriter, r *http.Request) {
-	w.Write([]byte("Go to /courses/description"))
+	_, err := w.Write([]byte("Go to /courses/description"))
+	if err != nil {
+		log.Printf("welcome to hexlet error: %s\n", err.Error())
+	}
 }
 
 func CourseDescHandler(w http.ResponseWriter, r *http.Request) {
@@ -55,6 +106,64 @@ func CourseDescHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Write([]byte(response))
 
+}
+
+func SumHandler(logger *logrus.Logger) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+
+		paramX := r.URL.Query().Get("x")
+		if paramX == "" {
+			http.Error(w, "Missing parameter: x", http.StatusBadRequest)
+			return
+		}
+		paramY := r.URL.Query().Get("y")
+		if paramY == "" {
+			http.Error(w, "Missing parameter: y", http.StatusBadRequest)
+			return
+		}
+		// Парсим как big.Int (для любых чисел)
+		x := new(big.Int)
+		_, okX := x.SetString(paramX, 10)
+		if !okX {
+			http.Error(w, "x should be a valid integer", http.StatusBadRequest)
+			return
+		}
+
+		y := new(big.Int)
+		_, okY := y.SetString(paramY, 10)
+		if !okY {
+			http.Error(w, "y should be a valid integer", http.StatusBadRequest)
+			return
+		}
+
+		// Проверяем что числа положительные
+		if x.Sign() < 0 || y.Sign() < 0 {
+			http.Error(w, "x and y must be positive", http.StatusBadRequest)
+			return
+		}
+
+		// Складываем
+		sum := new(big.Int).Add(x, y)
+
+		// Проверяем не превышает ли MaxInt
+		maxInt := big.NewInt(math.MaxInt)
+		if sum.Cmp(maxInt) > 0 {
+			logger.WithFields(logrus.Fields{
+				"x": paramX,
+				"y": paramY,
+			}).Warn("Sum overflows int")
+
+			// Возвращаем -1
+			w.Write([]byte("-1"))
+			return
+		}
+
+		// Конвертируем big.Int в int (теперь безопасно)
+		resultInt := int(sum.Int64())
+		result := strconv.Itoa(resultInt)
+		w.Write([]byte(result))
+
+	}
 }
 
 /*
