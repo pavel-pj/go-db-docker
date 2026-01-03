@@ -7,41 +7,72 @@ package productsdb
 
 import (
 	"context"
-	"database/sql"
 )
 
 const createProduct = `-- name: CreateProduct :one
-INSERT INTO products (name, status, price)
-VALUES ($1, $2, $3)
-RETURNING id, name, price, status, created_at, updated_at
+INSERT INTO products (slug,title,description,price_cents)
+values($1,$2,$3,$4)
+RETURNING id,slug,title,description,price_cents,created_at
 `
 
 type CreateProductParams struct {
-	Name   string
-	Status string
-	Price  sql.NullInt32
+	Slug        string
+	Title       string
+	Description string
+	PriceCents  int32
 }
 
 func (q *Queries) CreateProduct(ctx context.Context, arg CreateProductParams) (Product, error) {
-	row := q.db.QueryRowContext(ctx, createProduct, arg.Name, arg.Status, arg.Price)
+	row := q.db.QueryRowContext(ctx, createProduct,
+		arg.Slug,
+		arg.Title,
+		arg.Description,
+		arg.PriceCents,
+	)
 	var i Product
 	err := row.Scan(
 		&i.ID,
-		&i.Name,
-		&i.Price,
-		&i.Status,
+		&i.Slug,
+		&i.Title,
+		&i.Description,
+		&i.PriceCents,
 		&i.CreatedAt,
-		&i.UpdatedAt,
 	)
 	return i, err
 }
 
-const deleteProduct = `-- name: DeleteProduct :execrows
-DELETE from products where name = $1
+const deleteAllProducts = `-- name: DeleteAllProducts :exec
+Delete from products
 `
 
-func (q *Queries) DeleteProduct(ctx context.Context, name string) (int64, error) {
-	result, err := q.db.ExecContext(ctx, deleteProduct, name)
+func (q *Queries) DeleteAllProducts(ctx context.Context) error {
+	_, err := q.db.ExecContext(ctx, deleteAllProducts)
+	return err
+}
+
+const deleteProduct = `-- name: DeleteProduct :execrows
+DELETE from products where id = $1
+`
+
+func (q *Queries) DeleteProduct(ctx context.Context, id int32) (int64, error) {
+	result, err := q.db.ExecContext(ctx, deleteProduct, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const updateProductPrice = `-- name: UpdateProductPrice :execrows
+UPDATE products set price_cents=$1 where id =$2
+`
+
+type UpdateProductPriceParams struct {
+	PriceCents int32
+	ID         int32
+}
+
+func (q *Queries) UpdateProductPrice(ctx context.Context, arg UpdateProductPriceParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, updateProductPrice, arg.PriceCents, arg.ID)
 	if err != nil {
 		return 0, err
 	}

@@ -1,4 +1,0 @@
-directory: database/migrations
-driver: postgres
-table_name: goose_migrations
-verbose: true

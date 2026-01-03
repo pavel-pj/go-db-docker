@@ -1,3 +1,5 @@
+-- +goose Up
+-- +goose StatementBegin
 CREATE TABLE products(
     id SERIAL PRIMARY KEY  ,
     slug TEXT NOT NULL UNIQUE,
@@ -6,3 +8,9 @@ CREATE TABLE products(
     price_cents INTEGER NOT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+-- +goose StatementEnd
+
+-- +goose Down
+-- +goose StatementBegin
+DROP TABLE IF EXISTS products;
+-- +goose StatementEnd

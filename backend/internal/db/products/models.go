@@ -5,14 +5,14 @@
 package productsdb
 
 import (
-	"database/sql"
+	"time"
 )
 
 type Product struct {
-	ID        int32
-	Name      string
-	Price     sql.NullInt32
-	Status    string
-	CreatedAt sql.NullTime
-	UpdatedAt sql.NullTime
+	ID          int32
+	Slug        string
+	Title       string
+	Description string
+	PriceCents  int32
+	CreatedAt   time.Time
 }

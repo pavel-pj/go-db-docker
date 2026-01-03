@@ -1,26 +1,63 @@
 package main
 
 import (
-	"context"
-	"database/sql"
-	"embed"
 	"fmt"
-	"log"
-	"os"
+	"net/http"
+	"strconv"
 	"time"
 
 	_ "github.com/lib/pq" // драйвер PostgreSQL
 
-	"github.com/golang-migrate/migrate/v4"
-	"github.com/golang-migrate/migrate/v4/database/postgres"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 )
 
-//go:embed database/migrations
-var migrationsFS embed.FS
+var courses = map[int64]string{
+	1: "Introduction to programming",
+	2: "Introduction to algorithms",
+	3: "Data structures",
+}
 
 func main() {
 
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", IndexHandler)
+	mux.HandleFunc("/courses/description", CourseDescHandler)
+
+	server := &http.Server{
+		Addr:              ":8100",
+		Handler:           mux,
+		ReadHeaderTimeout: 10 * time.Second,
+	}
+
+	err := server.ListenAndServe()
+	if err != nil {
+		panic(err)
+	}
+
+	//http.ListenAndServe(":8100", nil)
+}
+
+func IndexHandler(w http.ResponseWriter, r *http.Request) {
+	w.Write([]byte("Go to /courses/description"))
+}
+
+func CourseDescHandler(w http.ResponseWriter, r *http.Request) {
+	getParam := r.URL.Query().Get("course_id")
+	param, err := strconv.ParseInt(getParam, 10, 64)
+	if err != nil {
+		fmt.Fprintf(w, "Parse error: %v", err)
+		return
+	}
+	response, ok := courses[param]
+	if !ok {
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+	w.Write([]byte(response))
+
+}
+
+/*
 	dbConn, err := dbInit()
 	if err != nil {
 		log.Fatalf("❌ Ошибка подключения к БД: %v", err)
@@ -29,77 +66,158 @@ func main() {
 	log.Println("✅ Успешное подключение к БД")
 
 	// Создаем экземпляр Queries из sqlc
-	//queries := paymentsdb.New(dbConn)
-	//ctx := context.Background()
+	productStore := store.NewProductStore(dbConn)
+	productService := service.NewProductService(productStore)
 
-	data, _ := migrationsFS.ReadFile("001_create_users.down.sql")
-	fmt.Println(string(data))
+	//queries := productsdb.New(dbConn)
+	ctx := context.Background()
+*/
+
+/*
+		// CRUD операции
+		created, err := productService.Create(ctx, service.CreateProductInput{
+			Slug:        "wooden-desk",
+			Title:       "Wooden Desk",
+			Description: "Solid oak desk",
+			PriceCents:  15000,
+		})
+		if err != nil {
+			log.Fatal(err)
+		}
+		log.Printf("Created: %v", created)
+
+	p, err := productService.Get(ctx, 26)
+	if err != nil {
+		log.Fatal(err)
+	}
+	log.Println(p)
+
+	//err = queries.DeleteAllProducts(ctx)
+	/*
+			if err != nil {
+				fmt.Println(err)
+			} else {
+				fmt.Println("Очистили porducts")
+			}
+
+
+		result, err := queries.CreateProduct(ctx, productsdb.CreateProductParams{
+			Slug:        "UUU24",
+			Title:       "rqwer",
+			Description: "A62562344Q",
+			PriceCents:  5342,
+		})
+		if err != nil {
+			fmt.Println(err)
+		} else {
+			fmt.Println("Создание:")
+			fmt.Println(result)
+		}
+
+		id := result.ID
+
+		result, err = queries.GetProductByID(ctx, id)
+		if err != nil {
+			fmt.Println(err)
+		} else {
+			fmt.Println("Show by ID:")
+			fmt.Println(result)
+		}
+
+		resultIndex, err := queries.ListProducts(ctx, productsdb.ListProductsParams{
+			Limit: 10, Offset: 0,
+		})
+		if err != nil {
+			fmt.Println(err)
+		} else {
+			fmt.Println("INDEX:")
+			fmt.Println(resultIndex)
+		}
+
+		rowsAffected, err := queries.UpdateProductPrice(ctx, productsdb.UpdateProductPriceParams{
+			PriceCents: 999,
+			ID:         id,
+		})
+		if err != nil {
+			fmt.Println(err)
+		} else {
+			fmt.Println("update:")
+			fmt.Println(rowsAffected)
+		}
+
+		rowsAffected, err = queries.DeleteProduct(ctx, id)
+		if err != nil {
+			fmt.Println(err)
+		} else {
+			fmt.Println("DELETED")
+			fmt.Println(rowsAffected)
+		}
+
+		/*
+			result, err := queries.CreatePayment(ctx, paymentsdb.CreatePaymentParams{
+				InvoiceID:   "inv-42",
+				AmountCents: 9900,
+				Status:      "pending",
+			})
+*/
+/*
+	result, err := queries.SetPaymentStatus(ctx, paymentsdb.SetPaymentStatusParams{
+		Status: "paid",
+		ID:     1,
+	})
+
+	if err != nil {
+		fmt.Println(err)
+	} else {
+		fmt.Println(result)
+	}
 
 	/*
-		result, err := queries.CreatePayment(ctx, paymentsdb.CreatePaymentParams{
-			InvoiceID:   "inv-42",
-			AmountCents: 9900,
-			Status:      "pending",
+		result, err := queries.CreateUser(ctx, userDb.CreateUserParams{
+			Email: "Nunuee@mail.ru",
+			Name:  "FUFA",
 		})
-	*/
-	/*
-		result, err := queries.SetPaymentStatus(ctx, paymentsdb.SetPaymentStatusParams{
-			Status: "paid",
-			ID:     1,
-		})
-
 		if err != nil {
 			fmt.Println(err)
 		} else {
 			fmt.Println(result)
 		}
 
+		err = queries.UpdateUserName(ctx, userDb.UpdateUserNameParams{Name: "ЧЕБУРАКА", ID: 1})
+		if err != nil {
+			fmt.Println(err)
+		} else {
+			fmt.Println("Обновлено")
+		}
+
+		res, err := queries.DeleteUser(ctx, 4)
+		if err != nil {
+			fmt.Println(err)
+		} else {
+			fmt.Println(res)
+		}
+
 		/*
-			result, err := queries.CreateUser(ctx, userDb.CreateUserParams{
-				Email: "Nunuee@mail.ru",
-				Name:  "FUFA",
+			// 2. Создать продукт БЕЗ цены
+			_, err = queries.CreateProduct(ctx, productsdb.CreateProductParams{
+				Name:   "Компьютер",
+				Status: "Active",
+				Price:  sql.NullInt32{Int32: 2988, Valid: true},
 			})
 			if err != nil {
-				fmt.Println(err)
-			} else {
-				fmt.Println(result)
+				log.Printf("❌ ОШИБКА: %v", err)
 			}
 
-			err = queries.UpdateUserName(ctx, userDb.UpdateUserNameParams{Name: "ЧЕБУРАКА", ID: 1})
+			products, err := queries.GetProducts(ctx)
 			if err != nil {
-				fmt.Println(err)
+				log.Printf("❌ ОШИБКА: %v", err)
 			} else {
-				fmt.Println("Обновлено")
+
+				fmt.Println(products)
 			}
+*/
 
-			res, err := queries.DeleteUser(ctx, 4)
-			if err != nil {
-				fmt.Println(err)
-			} else {
-				fmt.Println(res)
-			}
-
-			/*
-				// 2. Создать продукт БЕЗ цены
-				_, err = queries.CreateProduct(ctx, productsdb.CreateProductParams{
-					Name:   "Компьютер",
-					Status: "Active",
-					Price:  sql.NullInt32{Int32: 2988, Valid: true},
-				})
-				if err != nil {
-					log.Printf("❌ ОШИБКА: %v", err)
-				}
-
-				products, err := queries.GetProducts(ctx)
-				if err != nil {
-					log.Printf("❌ ОШИБКА: %v", err)
-				} else {
-
-					fmt.Println(products)
-				}
-	*/
-
-	/*
+/*
 			user, err := queries.CreateUser(ctx, db.CreateUserParams{
 				Name:  "Валера Киношников",
 				Email: "noneus@mail.ru",
@@ -118,10 +236,11 @@ func main() {
 		} else {
 			log.Println(user)
 		}
-	*/
+
 
 }
 
+/*
 func dbInit() (*sql.DB, error) {
 	// Получаем переменные окружения
 	dbHost := getEnv("DB_HOST", "localhost")
@@ -160,11 +279,6 @@ func dbInit() (*sql.DB, error) {
 
 	//log.Println("✅ Connected to PostgreSQL")
 
-	// Запуск миграций
-	if err := runMigrations(dbConn); err != nil {
-		dbConn.Close() // Закрываем при ошибке миграций
-		return nil, fmt.Errorf("migrations failed: %w", err)
-	}
 
 	return dbConn, nil
 }
@@ -175,47 +289,5 @@ func getEnv(key, defaultValue string) string {
 		return value
 	}
 	return defaultValue
-}
-
-func runMigrations(db *sql.DB) error {
-	// Создаем драйвер для миграций
-	driver, err := postgres.WithInstance(db, &postgres.Config{})
-	if err != nil {
-		return fmt.Errorf("create migration driver: %w", err)
-	}
-
-	// Создаем мигратор
-	m, err := migrate.NewWithDatabaseInstance(
-		"file://database/migrations", // путь к миграциям
-		"postgres",                   // имя базы
-		driver,
-	)
-	if err != nil {
-		return fmt.Errorf("create migrator: %w", err)
-	}
-
-	// Запускаем миграции вверх
-	if err := m.Up(); err != nil && err != migrate.ErrNoChange {
-		return fmt.Errorf("run migrations up: %w", err)
-	}
-
-	//log.Println("✅ Migrations applied successfully")
-
-	return nil
-}
-
-/*
-// Обработчик для /api/users (GET и POST)
-func usersHandler(q *db.Queries) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		switch r.Method {
-		//case http.MethodGet:
-		//handlers.ListUsersHandler(q)(w, r)
-		case http.MethodPost:
-			handlers.CreateUserHandler(q)(w, r)
-		default:
-			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		}
-	}
 }
 */

@@ -9,31 +9,37 @@ import (
 	"context"
 )
 
-const getProduct = `-- name: GetProduct :one
-SELECT id, name, price, status, created_at, updated_at FROM products
-WHERE id = $1 LIMIT 1
+const getProductByID = `-- name: GetProductByID :one
+SELECT id,slug,title,description,price_cents,created_at 
+from products where id = $1
 `
 
-func (q *Queries) GetProduct(ctx context.Context, id int32) (Product, error) {
-	row := q.db.QueryRowContext(ctx, getProduct, id)
+func (q *Queries) GetProductByID(ctx context.Context, id int32) (Product, error) {
+	row := q.db.QueryRowContext(ctx, getProductByID, id)
 	var i Product
 	err := row.Scan(
 		&i.ID,
-		&i.Name,
-		&i.Price,
-		&i.Status,
+		&i.Slug,
+		&i.Title,
+		&i.Description,
+		&i.PriceCents,
 		&i.CreatedAt,
-		&i.UpdatedAt,
 	)
 	return i, err
 }
 
-const getProducts = `-- name: GetProducts :many
-SELECT id, name, price, status, created_at, updated_at FROM products
+const listProducts = `-- name: ListProducts :many
+SELECT id,slug,title,description,price_cents,created_at FROM products
+LIMIT $1 OFFSET $2
 `
 
-func (q *Queries) GetProducts(ctx context.Context) ([]Product, error) {
-	rows, err := q.db.QueryContext(ctx, getProducts)
+type ListProductsParams struct {
+	Limit  int32
+	Offset int32
+}
+
+func (q *Queries) ListProducts(ctx context.Context, arg ListProductsParams) ([]Product, error) {
+	rows, err := q.db.QueryContext(ctx, listProducts, arg.Limit, arg.Offset)
 	if err != nil {
 		return nil, err
 	}
@@ -43,11 +49,11 @@ func (q *Queries) GetProducts(ctx context.Context) ([]Product, error) {
 		var i Product
 		if err := rows.Scan(
 			&i.ID,
-			&i.Name,
-			&i.Price,
-			&i.Status,
+			&i.Slug,
+			&i.Title,
+			&i.Description,
+			&i.PriceCents,
 			&i.CreatedAt,
-			&i.UpdatedAt,
 		); err != nil {
 			return nil, err
 		}

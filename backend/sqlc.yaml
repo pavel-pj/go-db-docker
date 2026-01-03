@@ -8,6 +8,7 @@ sql:
       go:
         package: "productsdb"
         out: "internal/db/products"
+        emit_interface: true
         #sql_package: "database/sql"  
   - engine: "postgresql"   
     schema: "schema/users"
@@ -16,6 +17,7 @@ sql:
       go:
         package: "usersdb"
         out: "internal/db/users"
+        emit_interface: true
   - engine: "postgresql"   
     schema: "schema/payments"
     queries: "queries/payments"
@@ -23,4 +25,5 @@ sql:
       go:
         package: "paymentsdb"
         out: "internal/db/payments"
+        emit_interface: true
      
