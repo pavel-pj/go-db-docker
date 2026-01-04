@@ -2,15 +2,13 @@ package main
 
 import (
 	"fmt"
-	"io"
 	"log"
 	"math"
 	"math/big"
 	"net/http"
-	"os"
-	"path/filepath"
 	"strconv"
-	"time"
+
+	"github.com/gofiber/fiber/v2"
 
 	_ "github.com/lib/pq" // драйвер PostgreSQL
 	"github.com/sirupsen/logrus"
@@ -24,65 +22,40 @@ var courses = map[int64]string{
 	3: "Data structures",
 }
 
+var counters = make(map[string]int64)
+
 func main() {
 
-	cwd, _ := os.Getwd()
-	logFile := filepath.Join(cwd, ".log")
-	logger := logrus.New()
-	logger.SetOutput(os.Stdout)
-	file, err := os.OpenFile(logFile, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0755)
-	if err != nil {
-		logger.Fatal(err)
-	}
-	defer file.Close()
+	webApp := fiber.New()
 
-	logger.SetOutput(io.MultiWriter(os.Stdout, file))
-
-	mux := http.NewServeMux()
-
-	server := &http.Server{
-		Addr:              ":8100",
-		Handler:           mux,
-		ReadHeaderTimeout: 10 * time.Second,
-	}
-
-	mux.HandleFunc("/", IndexHandler)
-	mux.HandleFunc("/courses/description", CourseDescHandler)
-	mux.HandleFunc("/sum", SumHandler(logger))
-
-	port := "8100"
-	logWithPort := logrus.WithFields(logrus.Fields{
-		"port": port,
-	})
-	logWithPort.Info("Starting a web-server on port")
-	logWithPort.Fatal(server.ListenAndServe())
-
-	/*
-		port := "8100"
-		server := &http.Server{
-			Addr:              ":" + port,
-			Handler:           mux,
-			ReadHeaderTimeout: 10 * time.Second,
+	webApp.Get("/counter/:event", func(c *fiber.Ctx) error {
+		param := c.Params("event", "")
+		if param == "" {
+			return c.SendStatus(fiber.StatusUnprocessableEntity)
 		}
 
-		// Дополнительная информация передается функцией WithFields
-		logrus.WithFields(logrus.Fields{
-			"port": port,
-		}).Info("Starting a web-server on port")
-		logrus.Fatal(server.ListenAndServe())
-		/*
-			err := server.ListenAndServe()
-			if err != nil {
-				panic(err)
-			}
+		result, exists := counters[param]
+		if !exists {
+			return c.SendString(fiber.ErrNotFound.Message) //c.SendStatus(fiber.StatusNotFound)
+		}
 
-			/*
-				port := "8100"
+		return c.SendString(strconv.FormatInt(int64(result), 10))
+	})
 
-				log.Println("Starting a web-server on port " + port)
-				log.Fatal(http.ListenAndServe(":"+port, nil))*/
+	webApp.Post("/counter/:event", func(c *fiber.Ctx) error {
+		param := c.Params("event", "")
+		if param == "" {
+			return c.SendStatus(fiber.StatusUnprocessableEntity)
+		}
 
-	//http.ListenAndServe(":8100", nil)
+		counters[param] += 1
+
+		return c.SendStatus(fiber.StatusOK)
+	})
+
+	// Запускаем веб-приложение на порту 80
+	// Оборачиваем в функцию логирования, чтобы видеть ошибки, если они возникнут
+	logrus.Fatal(webApp.Listen(":8100"))
 }
 
 func IndexHandler(w http.ResponseWriter, r *http.Request) {
