@@ -22,35 +22,41 @@ var courses = map[int64]string{
 	3: "Data structures",
 }
 
-var counters = make(map[string]int64)
+var postLikes = make(map[string]int64)
 
 func main() {
 
 	webApp := fiber.New()
 
-	webApp.Get("/counter/:event", func(c *fiber.Ctx) error {
-		param := c.Params("event", "")
+	webApp.Get("/likes/:post_id", func(c *fiber.Ctx) error {
+		param := c.Params("post_id", "")
 		if param == "" {
 			return c.SendStatus(fiber.StatusUnprocessableEntity)
 		}
 
-		result, exists := counters[param]
+		result, exists := postLikes[param]
 		if !exists {
-			return c.SendString(fiber.ErrNotFound.Message) //c.SendStatus(fiber.StatusNotFound)
+			return c.SendStatus(fiber.StatusNotFound)
 		}
 
 		return c.SendString(strconv.FormatInt(int64(result), 10))
 	})
 
-	webApp.Post("/counter/:event", func(c *fiber.Ctx) error {
-		param := c.Params("event", "")
+	webApp.Post("/likes/:post_id", func(c *fiber.Ctx) error {
+		param := c.Params("post_id", "")
 		if param == "" {
 			return c.SendStatus(fiber.StatusUnprocessableEntity)
 		}
 
-		counters[param] += 1
+		_, exists := postLikes[param]
+		status := 200
+		if !exists {
+			status = 201
+		}
 
-		return c.SendStatus(fiber.StatusOK)
+		postLikes[param] += 1
+
+		return c.Status(status).SendString(strconv.FormatInt(int64(postLikes[param]), 10))
 	})
 
 	// Запускаем веб-приложение на порту 80
