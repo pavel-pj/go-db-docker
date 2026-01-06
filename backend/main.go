@@ -3,8 +3,11 @@ package main
 import (
 	"errors"
 	"fmt"
+	"log"
+	"slices"
 	"strconv"
 
+	"github.com/go-playground/validator/v10"
 	"github.com/gofiber/fiber/v2"
 	_ "github.com/lib/pq" // драйвер PostgreSQL
 	"github.com/sirupsen/logrus"
@@ -20,8 +23,8 @@ type (
 	}
 
 	CreateTaskRequest struct {
-		Desc     string `json:"description"`
-		Deadline int64  `json:"deadline"`
+		Desc     string `json:"description" validate:"required,min=3,max=25"`
+		Deadline int64  `json:"deadline" validate:"required"`
 	}
 
 	CreateTaskResponse struct {
@@ -47,19 +50,127 @@ var (
 
 var ErrNotFound = fmt.Errorf("Not found model")
 
+//***************************
+//JSON
+
+type (
+	BinarySearchRequest struct {
+		Numbers []int `json:"numbers"`
+		Target  int   `json:"target"`
+	}
+
+	BinarySearchResponse struct {
+		TargetIndex int    `json:"target_index"`
+		Error       string `json:"error,omitempty"`
+	}
+)
+
+// ****************************
+// Users
+type User struct {
+	ID      int64
+	Email   string
+	Age     int
+	Country string
+}
+
+type (
+	UserCreateRequest struct {
+		ID      int64  `json:"id" validate:"required,gt=0"`
+		Email   string `json:"email" validate:"required,email"`
+		Age     int    `json:"age" validate:"required,gte=18,lte=130"`
+		Country string `json:"country" validate:"allowable_country"`
+	}
+	UserCreateResponce struct {
+		ID      int64  `json:"id"`
+		Email   string `json:"email"`
+		Age     int    `json:"age"`
+		Country string `json:"country"`
+	}
+)
+
+var ValidCountry = []string{"USA", "Germany", "France"}
+
+var users = map[int64]User{}
+
+const targetNotFound = -1
+
 func main() {
+	validate := validator.New()
+	vErr := validate.RegisterValidation("allowable_country", func(fl validator.FieldLevel) bool {
+		// Проверяем страну
+		text := fl.Field().String()
+		for _, country := range ValidCountry {
+			if country == text {
+				return true
+			}
+		}
+		return false
+	})
+	if vErr != nil {
+		log.Fatal("register validation ", vErr)
+	}
 
 	taskHandler := &TaskHandler{
 		storage: &TaskStorage{
 			tasks: tasks,
 		},
+		validator: validate,
 	}
 
 	webApp := fiber.New()
+
+	webApp.Post("/users", func(c *fiber.Ctx) error {
+		var request UserCreateRequest
+		err := c.BodyParser(&request)
+		if err != nil {
+			return c.Status(fiber.StatusUnprocessableEntity).SendString(err.Error())
+		}
+
+		err = validate.Struct(request)
+		if err != nil {
+			return c.Status(fiber.StatusUnprocessableEntity).SendString(err.Error())
+		}
+
+		user := User{
+			ID:      request.ID,
+			Email:   request.Email,
+			Age:     request.Age,
+			Country: request.Country,
+		}
+
+		users[request.ID] = user
+		return c.Status(fiber.StatusOK).SendString("OK")
+	})
+
 	webApp.Post("/tasks", taskHandler.CreateTask)
 	webApp.Get("/tasks/:id", taskHandler.GetTask)
 	webApp.Patch("/tasks/:id", taskHandler.UpdateTask)
 	webApp.Delete("/tasks/:id", taskHandler.DeleteTask)
+
+	webApp.Post("/search", func(c *fiber.Ctx) error {
+		var request BinarySearchRequest
+		err := c.BodyParser(&request)
+		if err != nil {
+			return c.Status(fiber.StatusBadRequest).JSON(BinarySearchResponse{
+				TargetIndex: targetNotFound,
+				Error:       "Invalid JSON",
+			})
+		}
+
+		targetIndex := slices.Index(request.Numbers, request.Target)
+		if targetIndex == -1 {
+			return c.Status(fiber.StatusNotFound).JSON(BinarySearchResponse{
+				TargetIndex: targetNotFound,
+				Error:       "Invalid JSON",
+			})
+		}
+
+		return c.Status(fiber.StatusOK).JSON(BinarySearchResponse{
+			TargetIndex: targetIndex,
+		})
+
+	})
 
 	// Оборачиваем в функцию логирования, чтобы видеть ошибки, если они возникнут
 	logrus.Fatal(webApp.Listen(":8100"))
@@ -74,7 +185,8 @@ type TaskStorageInterface interface {
 }
 
 type TaskHandler struct {
-	storage TaskStorageInterface
+	storage   TaskStorageInterface
+	validator *validator.Validate
 }
 
 type TaskStorage struct {
@@ -87,6 +199,11 @@ func (t *TaskHandler) CreateTask(c *fiber.Ctx) error {
 	err := c.BodyParser(&request)
 	if err != nil {
 		return err
+	}
+
+	err = t.validator.Struct(request)
+	if err != nil {
+		return c.Status(fiber.StatusUnprocessableEntity).SendString(err.Error())
 	}
 
 	task := Task{
