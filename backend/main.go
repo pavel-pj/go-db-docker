@@ -45,6 +45,8 @@ var (
 	tasks               = make(map[int64]Task)
 )
 
+var ErrNotFound = fmt.Errorf("Not found model")
+
 func main() {
 
 	taskHandler := &TaskHandler{
@@ -54,8 +56,10 @@ func main() {
 	}
 
 	webApp := fiber.New()
-	webApp.Post("tasks", taskHandler.CreateTask)
-	webApp.Get("tasks/:id", taskHandler.GetTask)
+	webApp.Post("/tasks", taskHandler.CreateTask)
+	webApp.Get("/tasks/:id", taskHandler.GetTask)
+	webApp.Patch("/tasks/:id", taskHandler.UpdateTask)
+	webApp.Delete("/tasks/:id", taskHandler.DeleteTask)
 
 	// Оборачиваем в функцию логирования, чтобы видеть ошибки, если они возникнут
 	logrus.Fatal(webApp.Listen(":8100"))
@@ -65,6 +69,8 @@ func main() {
 type TaskStorageInterface interface {
 	CreateTask(task Task) int64
 	GetTask(id int64) (Task, error)
+	UpdateTask(task Task) (Task, error)
+	DeleteTask(id int64) error
 }
 
 type TaskHandler struct {
@@ -98,8 +104,6 @@ func (t *TaskHandler) CreateTask(c *fiber.Ctx) error {
 
 }
 
-var ErrNotFound = fmt.Errorf("Not found model")
-
 func (t *TaskHandler) GetTask(c *fiber.Ctx) error {
 	id := c.Params("id")
 	if id == "" {
@@ -125,6 +129,56 @@ func (t *TaskHandler) GetTask(c *fiber.Ctx) error {
 
 }
 
+func (t *TaskHandler) UpdateTask(c *fiber.Ctx) error {
+	id := c.Params("id")
+	if id == "" {
+		return c.Status(400).SendString("Id should exists")
+	}
+	idInt64, err := strconv.ParseInt(id, 10, 64)
+	if err != nil {
+		return c.Status(400).SendString("Error Json")
+	}
+
+	var request UpdateTaskRequest
+	err = c.BodyParser(&request)
+	if err != nil {
+		return c.Status(400).SendString("Error Json")
+	}
+
+	task := Task{
+		ID:       idInt64,
+		Desc:     request.Desc,
+		Deadline: request.Deadline,
+	}
+
+	_, err = t.storage.UpdateTask(task)
+	if err != nil {
+		return c.SendStatus(404)
+	}
+
+	return c.SendStatus(200)
+
+}
+
+func (t *TaskHandler) DeleteTask(c *fiber.Ctx) error {
+	id := c.Params("id")
+	if id == "" {
+		return c.Status(400).SendString("Id should exists")
+	}
+	idInt64, err := strconv.ParseInt(id, 10, 64)
+	if err != nil {
+		return c.Status(400).SendString("Error ID")
+	}
+
+	err = t.storage.DeleteTask(idInt64)
+	if err != nil {
+		return c.SendStatus(404)
+	}
+
+	return c.SendStatus(200)
+
+}
+
 func (t *TaskStorage) CreateTask(task Task) int64 {
 	t.tasks[task.ID] = task
 	return task.ID
@@ -138,6 +192,29 @@ func (t *TaskStorage) GetTask(id int64) (Task, error) {
 		return Task{}, ErrNotFound
 	}
 	return result, nil
+
+}
+
+func (t *TaskStorage) UpdateTask(task Task) (Task, error) {
+	t.tasks[task.ID] = task
+	updated, ok := t.tasks[task.ID]
+	if !ok {
+		return Task{}, fmt.Errorf("Item not found")
+	}
+
+	return updated, nil
+
+}
+
+func (t *TaskStorage) DeleteTask(id int64) error {
+
+	_, ok := t.tasks[id]
+	if !ok {
+		return fmt.Errorf("Item not found")
+	}
+	delete(t.tasks, id)
+
+	return nil
 
 }
 
