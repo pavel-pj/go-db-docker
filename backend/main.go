@@ -4,11 +4,16 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"os"
 	"slices"
 	"strconv"
+	"time"
 
 	"github.com/go-playground/validator/v10"
 	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v2/middleware/limiter"
+	"github.com/gofiber/fiber/v2/middleware/logger"
+	"github.com/gofiber/fiber/v2/middleware/requestid"
 	_ "github.com/lib/pq" // драйвер PostgreSQL
 	"github.com/sirupsen/logrus"
 
@@ -96,6 +101,13 @@ var users = map[int64]User{}
 const targetNotFound = -1
 
 func main() {
+
+	file, err := os.OpenFile(".log", os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
+	if err != nil {
+		logrus.Fatalf("error opening file: %v", err)
+	}
+	defer file.Close()
+
 	validate := validator.New()
 	vErr := validate.RegisterValidation("allowable_country", func(fl validator.FieldLevel) bool {
 		// Проверяем страну
@@ -119,6 +131,27 @@ func main() {
 	}
 
 	webApp := fiber.New()
+
+	webApp.Use(limiter.New(limiter.Config{
+		KeyGenerator: func(c *fiber.Ctx) string {
+			return c.IP()
+		},
+		Max:        1,
+		Expiration: 2 * time.Second,
+	}))
+
+	webApp.Use(requestid.New())
+	webApp.Use(logger.New(logger.Config{
+		Format: "${locals:requestid}: ${method} ${path} - ${status} \n",
+		Output: file,
+	}))
+
+	webApp.Get("/", func(c *fiber.Ctx) error {
+		return c.SendString("OK")
+	})
+	webApp.Get("/saba", func(c *fiber.Ctx) error {
+		return c.SendString("OK")
+	})
 
 	webApp.Post("/users", func(c *fiber.Ctx) error {
 		var request UserCreateRequest
