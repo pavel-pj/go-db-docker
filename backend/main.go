@@ -3,17 +3,14 @@ package main
 import (
 	"errors"
 	"fmt"
-	"log"
 	"os"
-	"slices"
-	"strconv"
 	"time"
 
 	"github.com/go-playground/validator/v10"
+	jwtware "github.com/gofiber/contrib/jwt"
 	"github.com/gofiber/fiber/v2"
-	"github.com/gofiber/fiber/v2/middleware/limiter"
-	"github.com/gofiber/fiber/v2/middleware/logger"
-	"github.com/gofiber/fiber/v2/middleware/requestid"
+
+	jwt "github.com/golang-jwt/jwt/v5"
 	_ "github.com/lib/pq" // драйвер PostgreSQL
 	"github.com/sirupsen/logrus"
 
@@ -73,32 +70,42 @@ type (
 // ****************************
 // Users
 type User struct {
-	ID      int64
-	Email   string
-	Age     int
-	Country string
+	Email    string
+	Name     string
+	password string
 }
 
 type (
 	UserCreateRequest struct {
-		ID      int64  `json:"id" validate:"required,gt=0"`
-		Email   string `json:"email" validate:"required,email"`
-		Age     int    `json:"age" validate:"required,gte=18,lte=130"`
-		Country string `json:"country" validate:"allowable_country"`
+		Email    string `json:"email" validate:"required,email"`
+		Name     string `json:"name" validate:"required,min=3,max=50"`
+		Password string `json:"password" validate:"required,min=8,max=16"`
 	}
-	UserCreateResponce struct {
-		ID      int64  `json:"id"`
-		Email   string `json:"email"`
-		Age     int    `json:"age"`
-		Country string `json:"country"`
+
+	UserCreateReqsponse struct {
+		Email string `json:"email" `
+		Name  string `json:"name" `
+	}
+
+	LoginRequest struct {
+		Email    string `json:"email" vaidate:"required,email"`
+		Password string `json:"password" validate:"required,min=8,max=16"`
+	}
+
+	LoginResponse struct {
+		AccessToken string `json:"access_token"`
 	}
 )
 
-var ValidCountry = []string{"USA", "Germany", "France"}
+var users = map[string]User{}
 
-var users = map[int64]User{}
+var (
+	errBadCredentials = errors.New("email or password is incorrect")
+)
 
-const targetNotFound = -1
+var jwtSignature = []byte("supet-secret-signature-2400")
+
+var contextKeyUser = "user"
 
 func main() {
 
@@ -109,78 +116,216 @@ func main() {
 	defer file.Close()
 
 	validate := validator.New()
-	vErr := validate.RegisterValidation("allowable_country", func(fl validator.FieldLevel) bool {
-		// Проверяем страну
-		text := fl.Field().String()
-		for _, country := range ValidCountry {
-			if country == text {
-				return true
+	/*
+		vErr := validate.RegisterValidation("allowable_country", func(fl validator.FieldLevel) bool {
+			// Проверяем страну
+			text := fl.Field().String()
+			for _, country := range ValidCountry {
+				if country == text {
+					return true
+				}
 			}
+			return false
+		})
+		if vErr != nil {
+			log.Fatal("register validation ", vErr)
 		}
-		return false
-	})
-	if vErr != nil {
-		log.Fatal("register validation ", vErr)
-	}
 
-	taskHandler := &TaskHandler{
-		storage: &TaskStorage{
-			tasks: tasks,
+		taskHandler := &TaskHandler{
+			storage: &TaskStorage{
+				tasks: tasks,
+			},
+			validator: validate,
+		}
+	*/
+	authHandler := &AuthHandler{
+		storage: &AuthStorage{
+			users: users,
 		},
 		validator: validate,
+	}
+	userHandler := &UserHandler{
+		storage: &AuthStorage{
+			users: users,
+		},
 	}
 
 	webApp := fiber.New()
 
-	webApp.Use(limiter.New(limiter.Config{
-		KeyGenerator: func(c *fiber.Ctx) string {
-			return c.IP()
+	publicGroup := webApp.Group("")
+	publicGroup.Post("/register", authHandler.CreateUser)
+	publicGroup.Post("/login", authHandler.Login)
+
+	authorizedGroup := webApp.Group("")
+	authorizedGroup.Use(jwtware.New(jwtware.Config{
+		SigningKey: jwtware.SigningKey{
+			Key: jwtSignature,
 		},
-		Max:        1,
-		Expiration: 2 * time.Second,
+		ContextKey: contextKeyUser,
 	}))
 
-	webApp.Use(requestid.New())
-	webApp.Use(logger.New(logger.Config{
-		Format: "${locals:requestid}: ${method} ${path} - ${status} \n",
-		Output: file,
-	}))
+	authorizedGroup.Get("/profile", userHandler.Profile)
 
-	webApp.Get("/", func(c *fiber.Ctx) error {
-		return c.SendString("OK")
+	/*
+		webApp.Use(limiter.New(limiter.Config{
+			KeyGenerator: func(c *fiber.Ctx) string {
+				return c.IP()
+			},
+			Max:        1,
+			Expiration: 2 * time.Second,
+		}))
+
+		webApp.Use(requestid.New())
+		webApp.Use(logger.New(logger.Config{
+			Format: "${locals:requestid}: ${method} ${path} - ${status} \n",
+			Output: file,
+		}))
+	*/
+
+	//webApp.Post("/tasks", authHandler.CreateUser)
+
+	//webApp.Post("/tasks", taskHandler.CreateTask)
+	//webApp.Get("/tasks/:id", taskHandler.GetTask)
+	//webApp.Patch("/tasks/:id", taskHandler.UpdateTask)
+	//webApp.Delete("/tasks/:id", taskHandler.DeleteTask)
+
+	logrus.Fatal(webApp.Listen(":8100"))
+
+}
+
+type AuthHandler struct {
+	storage   *AuthStorage
+	validator *validator.Validate
+}
+
+type UserHandler struct {
+	storage *AuthStorage
+}
+
+type AuthStorage struct {
+	users map[string]User
+}
+
+func (h *AuthHandler) CreateUser(c *fiber.Ctx) error {
+	var request UserCreateRequest
+	err := c.BodyParser(&request)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).SendString(fmt.Sprintf("Error: %w", err))
+	}
+
+	err = h.validator.Struct(request)
+	if err != nil {
+		return c.Status(fiber.StatusUnprocessableEntity).JSON(fiber.Map{
+			"error:":   "bad validateion",
+			"details:": err.Error(),
+		})
+	}
+
+	_, exists := h.storage.users[request.Email]
+	if exists {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error:": "user is already registered",
+		})
+	}
+
+	h.storage.users[request.Email] = User{
+		Email:    request.Email,
+		Name:     request.Name,
+		password: request.Password,
+	}
+
+	return c.Status(fiber.StatusOK).JSON(UserCreateReqsponse{
+		Name:  request.Name,
+		Email: request.Email,
 	})
-	webApp.Get("/saba", func(c *fiber.Ctx) error {
-		return c.SendString("OK")
+
+}
+
+func (h *AuthHandler) Login(c *fiber.Ctx) error {
+	var request LoginRequest
+	err := c.BodyParser(&request)
+	if err != nil {
+		return c.SendStatus(fiber.StatusBadRequest)
+	}
+
+	err = h.validator.Struct(request)
+	if err != nil {
+		return c.Status(fiber.StatusUnprocessableEntity).JSON(fiber.Map{
+			"message:": "Error",
+			"details":  err.Error(),
+		})
+	}
+
+	user, exists := h.storage.users[request.Email]
+	if !exists {
+		return errBadCredentials
+	}
+
+	if user.password != request.Password {
+		return errBadCredentials
+	}
+
+	payload := jwt.MapClaims{
+		"sub": user.Email,
+		"exp": time.Now().Add(time.Hour * 72).Unix(),
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, payload)
+	t, err := token.SignedString(jwtSignature)
+	if err != nil {
+		return c.SendStatus(fiber.StatusOK)
+	}
+
+	return c.Status(fiber.StatusOK).JSON(LoginResponse{
+		AccessToken: t,
 	})
 
-	webApp.Post("/users", func(c *fiber.Ctx) error {
-		var request UserCreateRequest
-		err := c.BodyParser(&request)
-		if err != nil {
-			return c.Status(fiber.StatusUnprocessableEntity).SendString(err.Error())
-		}
+}
 
-		err = validate.Struct(request)
-		if err != nil {
-			return c.Status(fiber.StatusUnprocessableEntity).SendString(err.Error())
-		}
+func getUserPayloadFromCtx(c *fiber.Ctx) (jwt.MapClaims, bool) {
+	jwtToken, ok := c.Context().Value(contextKeyUser).(*jwt.Token)
+	if !ok {
+		logrus.WithFields(logrus.Fields{
+			"jwt_token_context_value": c.Context().Value(contextKeyUser),
+		}).Error("wrong type of JWT token in context")
+		return nil, false
+	}
 
-		user := User{
-			ID:      request.ID,
-			Email:   request.Email,
-			Age:     request.Age,
-			Country: request.Country,
-		}
+	payload, ok := jwtToken.Claims.(jwt.MapClaims)
+	if !ok {
+		logrus.WithFields(logrus.Fields{
+			"jwt_token_claims": jwtToken.Claims,
+		}).Error("wrong type of JWT token claims")
+		return nil, false
+	}
 
-		users[request.ID] = user
-		return c.Status(fiber.StatusOK).SendString("OK")
+	return payload, true
+
+}
+
+// Структура HTTP-ответа с информацией о пользователе
+type ProfileResponse struct {
+	Email string `json:"email"`
+	Name  string `json:"name"`
+}
+
+func (u *UserHandler) Profile(c *fiber.Ctx) error {
+	payload, ok := getUserPayloadFromCtx(c)
+	if !ok {
+		return c.SendStatus(fiber.StatusUnauthorized)
+	}
+	userInfo, ok := u.storage.users[payload["sub"].(string)]
+	if !ok {
+		return errors.New("user not found")
+	}
+
+	return c.Status(fiber.StatusOK).JSON(ProfileResponse{
+		Email: userInfo.Email,
+		Name:  userInfo.Name,
 	})
+}
 
-	webApp.Post("/tasks", taskHandler.CreateTask)
-	webApp.Get("/tasks/:id", taskHandler.GetTask)
-	webApp.Patch("/tasks/:id", taskHandler.UpdateTask)
-	webApp.Delete("/tasks/:id", taskHandler.DeleteTask)
-
+/*
 	webApp.Post("/search", func(c *fiber.Ctx) error {
 		var request BinarySearchRequest
 		err := c.BodyParser(&request)

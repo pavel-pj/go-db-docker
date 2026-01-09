@@ -13,3 +13,8 @@
 33fbb8c2-bc24-4254-b991-735a87e89972: GET / - 200 
 34fbb8c2-bc24-4254-b991-735a87e89972: GET / - 200 
 35fbb8c2-bc24-4254-b991-735a87e89972: GET / - 200 
+36fbb8c2-bc24-4254-b991-735a87e89972: GET /key - 404 
+55ead8c3-19d5-483c-8fe5-2398ba5c0dcd: GET /key - 200 
+56ead8c3-19d5-483c-8fe5-2398ba5c0dcd: GET /key - 200 
+57ead8c3-19d5-483c-8fe5-2398ba5c0dcd: GET /key - 200 
+58ead8c3-19d5-483c-8fe5-2398ba5c0dcd: GET /key - 200 
