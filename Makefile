@@ -6,6 +6,10 @@ export
 
 MIGRATIONS_DIR=./backend/database/migrations
 DB_URL_DOCKER=postgres://$(DB_USER):$(DB_PASSWORD)@postgres:5432/$(DB_NAME)?sslmode=disable
+
+
+#lint:
+#	cd backend && golangci-lint run ./...
  
 #goose
 
