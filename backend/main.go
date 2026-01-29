@@ -2,59 +2,49 @@ package main
 
 import (
 	"fmt"
-	"time"
-"sync"
-"net/http"
+	"net/http"
+	"sync"
+
 	"gorm.io/gorm"
 
 	_ "github.com/lib/pq" // драйвер PostgreSQL
 
-
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 )
 
-
-func fetch (url string, wg *sync.WaitGroup) {
-
-
+func fetch(url string, wg *sync.WaitGroup) {
 	defer wg.Done()
-	 start := time.Now() // Засекаем время начала
 
-	resp,err := http.Get(url)
+	resp, err := http.Get(url)
 	if err != nil {
-		fmt.Println("Ошибка : ",err)
+		fmt.Println("Error:", err)
+		return
 	}
 
 	defer resp.Body.Close()
 	fmt.Println(url, resp.Status)
-	duration := time.Since(start) // Вычисляем продолжительность
-  fmt.Printf("[%v] %s - %s\n", duration, url, resp.Status)
 
 }
- 
- 
 
 func main() {
-var wg sync.WaitGroup
 
-sites:= []string{
-	"https://google.com",
-	"https://hexlet.io",
-	"https://ya.ru",
-}
+	var wg sync.WaitGroup
 
-for _,v := range sites {
-	fmt.Println("Взяли сайт:%s",v)
-	wg.Add(1)
-	go func() {
-		fetch(v, &wg)
-	}()
+	sites := []string{
+		"https://google.com",
+		"https://ya.ru",
+		"https://example.ru",
+	}
 
-}
- 
+	for _, v := range sites {
+		wg.Add(1)
+		go fetch(v, &wg)
+
+	}
+
 	wg.Wait()
+	fmt.Println("Завершили работу")
 
-	fmt.Println(" Все запросы закончились")
 }
 
 /*
@@ -238,177 +228,175 @@ type UserPosts struct {
 	Name  string
 	Count int64
 }
- 
 
-	//time.Sleep(100 * time.Millisecond)
+//time.Sleep(100 * time.Millisecond)
+
+/*
+		file, err := os.OpenFile(".log", os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
+		if err != nil {
+			logrus.Fatalf("error opening file: %v", err)
+		}
+		defer file.Close()
+
+		validate := validator.New()
+
+
+	// Создание нового логгера с настройками
+	newLogger := logger.New(
+		log.New(log.Writer(), "\r\n", log.LstdFlags), // базовый вывод в консоль
+		logger.Config{
+			SlowThreshold: time.Second, // порог для медленных запросов
+			LogLevel:      logger.Info, // подробный уровень логирования
+			Colorful:      true,        // цветной вывод для удобства
+		},
+	)
+
+	// Получаем параметры из переменных окружения
+	dbHost := os.Getenv("DB_HOST")
+	if dbHost == "" {
+		dbHost = "localhost" // значение по умолчанию для локальной разработки
+	}
+
+	dbPort := os.Getenv("DB_PORT")
+	if dbPort == "" {
+		dbPort = "5432"
+	}
+
+	dbUser := os.Getenv("DB_USER")
+	if dbUser == "" {
+		dbUser = "golang"
+	}
+
+	dbPassword := os.Getenv("DB_PASSWORD")
+	if dbPassword == "" {
+		dbPassword = "secret"
+	}
+
+	dbName := os.Getenv("DB_NAME")
+	if dbName == "" {
+		dbName = "app"
+	}
+
+	// Формируем DSN строку
+	dsn := fmt.Sprintf(
+		"host=%s user=%s password=%s dbname=%s port=%s sslmode=disable",
+		dbHost, dbUser, dbPassword, dbName, dbPort,
+	)
+
+	logrus.Infof("Подключаемся к БД: %s:%s", dbHost, dbPort)
+	// Открытие соединения через драйвер postgres и GORM
+	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{
+		Logger:                 newLogger,
+		SkipDefaultTransaction: true, // операции без автоматической транзакции
+		PrepareStmt:            true, // кэширование подготовленных выражений
+	})
+	if err != nil {
+		// Логирование ошибки подключения и завершение программы
+		log.Fatalf("ошибка подключения к базе: %v", err)
+	}
+
+	// Если err == nil, соединение успешно установлено
+	logrus.Println("Соединение с базой установлено")
+
+	if err := db.AutoMigrate(
+		&User{},
+		&Product{},
+		&Profile{},
+		&Tag{},
+		&Post{}); err != nil {
+		log.Fatalf("ошибка миграции схемы: %v", err)
+	}
+
+	sqlDB, err := db.DB()
+	if err != nil {
+		log.Fatalf("ошибка доступа к пулу соединений: %v", err)
+	}
+
+	// Ping проверяет, что соединение живое и база отвечает
+	if err := sqlDB.Ping(); err != nil {
+		log.Fatalf("ошибка пинга базы: %v", err)
+	}
+
+	// Максимальное число открытых соединений к базе
+	sqlDB.SetMaxOpenConns(10)
+
+	// Максимальное число простаивающих (неиспользуемых) соединений в пуле
+	sqlDB.SetMaxIdleConns(5)
+
+	// Максимальное время жизни соединения
+	sqlDB.SetConnMaxLifetime(time.Hour)
 
 	/*
-			file, err := os.OpenFile(".log", os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
-			if err != nil {
-				logrus.Fatalf("error opening file: %v", err)
-			}
-			defer file.Close()
+		log.Println("Пул соединений настроен и готов к работе")
 
-			validate := validator.New()
-
-
-		// Создание нового логгера с настройками
-		newLogger := logger.New(
-			log.New(log.Writer(), "\r\n", log.LstdFlags), // базовый вывод в консоль
-			logger.Config{
-				SlowThreshold: time.Second, // порог для медленных запросов
-				LogLevel:      logger.Info, // подробный уровень логирования
-				Colorful:      true,        // цветной вывод для удобства
-			},
-		)
-
-		// Получаем параметры из переменных окружения
-		dbHost := os.Getenv("DB_HOST")
-		if dbHost == "" {
-			dbHost = "localhost" // значение по умолчанию для локальной разработки
-		}
-
-		dbPort := os.Getenv("DB_PORT")
-		if dbPort == "" {
-			dbPort = "5432"
-		}
-
-		dbUser := os.Getenv("DB_USER")
-		if dbUser == "" {
-			dbUser = "golang"
-		}
-
-		dbPassword := os.Getenv("DB_PASSWORD")
-		if dbPassword == "" {
-			dbPassword = "secret"
-		}
-
-		dbName := os.Getenv("DB_NAME")
-		if dbName == "" {
-			dbName = "app"
-		}
-
-		// Формируем DSN строку
-		dsn := fmt.Sprintf(
-			"host=%s user=%s password=%s dbname=%s port=%s sslmode=disable",
-			dbHost, dbUser, dbPassword, dbName, dbPort,
-		)
-
-		logrus.Infof("Подключаемся к БД: %s:%s", dbHost, dbPort)
-		// Открытие соединения через драйвер postgres и GORM
-		db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{
-			Logger:                 newLogger,
-			SkipDefaultTransaction: true, // операции без автоматической транзакции
-			PrepareStmt:            true, // кэширование подготовленных выражений
+		tx := db.Session(&gorm.Session{
+			DryRun: true, // режим генерации SQL без выполнения
 		})
-		if err != nil {
-			// Логирование ошибки подключения и завершение программы
-			log.Fatalf("ошибка подключения к базе: %v", err)
-		}
 
-		// Если err == nil, соединение успешно установлено
-		logrus.Println("Соединение с базой установлено")
+		// Формирование SELECT-запроса без обращения к базе
+		stmt := tx.First(&User{}, 1).Statement
 
-		if err := db.AutoMigrate(
-			&User{},
-			&Product{},
-			&Profile{},
-			&Tag{},
-			&Post{}); err != nil {
-			log.Fatalf("ошибка миграции схемы: %v", err)
-		}
-
-		sqlDB, err := db.DB()
-		if err != nil {
-			log.Fatalf("ошибка доступа к пулу соединений: %v", err)
-		}
-
-		// Ping проверяет, что соединение живое и база отвечает
-		if err := sqlDB.Ping(); err != nil {
-			log.Fatalf("ошибка пинга базы: %v", err)
-		}
-
-		// Максимальное число открытых соединений к базе
-		sqlDB.SetMaxOpenConns(10)
-
-		// Максимальное число простаивающих (неиспользуемых) соединений в пуле
-		sqlDB.SetMaxIdleConns(5)
-
-		// Максимальное время жизни соединения
-		sqlDB.SetConnMaxLifetime(time.Hour)
-
-		/*
-			log.Println("Пул соединений настроен и готов к работе")
-
-			tx := db.Session(&gorm.Session{
-				DryRun: true, // режим генерации SQL без выполнения
-			})
-
-			// Формирование SELECT-запроса без обращения к базе
-			stmt := tx.First(&User{}, 1).Statement
-
-			// Вывод текста запроса
-			log.Println("Сформированный SQL:", stmt.SQL.String())
+		// Вывод текста запроса
+		log.Println("Сформированный SQL:", stmt.SQL.String())
 
 
-		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-		defer cancel()
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
 
-		tx := db.WithContext(ctx)
+	tx := db.WithContext(ctx)
 
-		post := Post{
-			UserID: 4,
-			Title:  "HEllo about World",
-		}
-		if err = tx.Create(&post).Error; err != nil {
-			fmt.Printf("Error:%s", err)
-		}
+	post := Post{
+		UserID: 4,
+		Title:  "HEllo about World",
+	}
+	if err = tx.Create(&post).Error; err != nil {
+		fmt.Printf("Error:%s", err)
+	}
 
-		var uPosts []UserPosts
-		err = tx.Raw(`
-			select u.id,u."name" , count(p."title") from users u
-			left join posts p on u.id = p.user_id
-			where p.title like '%Go%'
-			group by u.id,u."name"`).Scan(&uPosts).Error
+	var uPosts []UserPosts
+	err = tx.Raw(`
+		select u.id,u."name" , count(p."title") from users u
+		left join posts p on u.id = p.user_id
+		where p.title like '%Go%'
+		group by u.id,u."name"`).Scan(&uPosts).Error
 
-		if err != nil {
-			fmt.Printf("Error:%s", err)
-		} else {
-			fmt.Println(uPosts)
-		}
+	if err != nil {
+		fmt.Printf("Error:%s", err)
+	} else {
+		fmt.Println(uPosts)
+	}
 
-		/*
-			err = db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-				user := User{
-					Name: "Oleg",
-				}
-				if err := tx.Create(&user).Error; err != nil {
+	/*
+		err = db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+			user := User{
+				Name: "Oleg",
+			}
+			if err := tx.Create(&user).Error; err != nil {
+				return err
+			}
+
+			posts := []Post{
+				{Title: "All About Go", UserID: user.ID},
+				{Title: "All ToDo Go", UserID: user.ID},
+				{Title: "Allilya", UserID: user.ID},
+			}
+			for _, v := range posts {
+				if err = tx.Create(&v).Error; err != nil {
 					return err
 				}
+			}
+			return nil
+		})
+*/
 
-				posts := []Post{
-					{Title: "All About Go", UserID: user.ID},
-					{Title: "All ToDo Go", UserID: user.ID},
-					{Title: "Allilya", UserID: user.ID},
-				}
-				for _, v := range posts {
-					if err = tx.Create(&v).Error; err != nil {
-						return err
-					}
-				}
-				return nil
-			})
-	*/
+/*
+	var users1 []User
+	if err = db.Preload("Posts", func(db *gorm.DB) *gorm.DB {
+		return db.Order("title DESC").Where("title LIKE ?", "%Go%")
+	}).
+		Find(&users1).Error; err != nil {
+		fmt.Printf("Error : %s", err)
+	}
 
-	/*
-		var users1 []User
-		if err = db.Preload("Posts", func(db *gorm.DB) *gorm.DB {
-			return db.Order("title DESC").Where("title LIKE ?", "%Go%")
-		}).
-			Find(&users1).Error; err != nil {
-			fmt.Printf("Error : %s", err)
-		}
-
-		fmt.Println(users1)
-	*/
- 
+	fmt.Println(users1)
+*/
