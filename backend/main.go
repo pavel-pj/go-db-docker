@@ -1,74 +1,43 @@
 package main
 
 import (
-	"strings"
-	"sync"
+	"fmt"
+	"time"
 )
 
-// User represents a domain model.
-type User struct {
-	ID        int
-	FirstName string
-	LastName  string
-	Email     string
-	Age       int
-}
-
-// UserDTO represents a public view model.
-type UserDTO struct {
-	ID       int
-	FullName string
-	Email    string
-	AgeGroup string
-}
-
-const (
-	AgeGroupMinor  = "minor"
-	AgeGroupAdult  = "adult"
-	AgeGroupSenior = "senior"
-)
-
-func MapUsers(users []User) []UserDTO {
-	var wg sync.WaitGroup
-
-	var userDTO []UserDTO
-
-	for _, user := range users {
-
-		wg.Add(1)
-
-		go func(u User, wg *sync.WaitGroup) {
-			defer wg.Done()
-			firstName := strings.TrimSpace(u.FirstName)
-			lastName := strings.TrimSpace(u.LastName)
-			FullName := firstName + " " + lastName
-			Email := strings.ToLower(u.Email)
-			var AgeGroup string
-			switch {
-			case u.Age < 18:
-				AgeGroup = "minor"
-			case u.Age >= 18 && u.Age < 65:
-				AgeGroup = "adult"
-			default:
-				AgeGroup = "senior"
-			}
-
-			userDto = append(userDto, UserDTO{
-				ID:       u.ID,
-				FullName: FullName,
-				Email:    Email,
-				AgeGroup: AgeGroup,
-			})
-
-		}(user, &wg)
-
+func CountMultiples(nums []int, k int) int {
+	if k == 0 {
+		return 0
 	}
 
-	wg.Wait()
-	return userDTO
+	ch := make(chan int)
+
+	for _, num := range nums {
+
+		go func(n int, k2 int) {
+
+			if n%k2 == 0 {
+				ch <- 1
+				fmt.Println(n)
+				time.Sleep(11100 * time.Millisecond)
+			} else {
+				ch <- 0
+			}
+		}(num, k)
+
+	}
+	//close(ch)
+	sum := 0
+
+	for i := 0; i < len(nums); i++ {
+		sum = sum + <-ch
+	}
+
+	return sum
 
 }
 
 func main() {
-
+	nums := []int{0, 1, 2, 3, 4, 5, 6, 10, 12, 15, 18, 21}
+	fmt.Println(CountMultiples(nums, 3))
 }
