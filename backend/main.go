@@ -2,42 +2,34 @@ package main
 
 import (
 	"fmt"
-	"time"
+	"sync"
 )
 
-func CountMultiples(nums []int, k int) int {
-	if k == 0 {
-		return 0
+func producer(ch chan<- int) {
+	for x := 1; x < 11; x++ {
+		ch <- x
 	}
+	close(ch)
+}
 
-	ch := make(chan int)
+func consumer(id int, ch <-chan int, wg *sync.WaitGroup) {
+	defer wg.Done()
+	for msg := range ch {
 
-	for _, num := range nums {
-
-		go func(n int, k2 int) {
-
-			if n%k2 == 0 {
-				ch <- 1
-				fmt.Println(n)
-				time.Sleep(11100 * time.Millisecond)
-			} else {
-				ch <- 0
-			}
-		}(num, k)
-
+		fmt.Println("consumer:", id, "; сообещние :", msg)
 	}
-	//close(ch)
-	sum := 0
-
-	for i := 0; i < len(nums); i++ {
-		sum = sum + <-ch
-	}
-
-	return sum
-
 }
 
 func main() {
-	nums := []int{0, 1, 2, 3, 4, 5, 6, 10, 12, 15, 18, 21}
-	fmt.Println(CountMultiples(nums, 3))
+	var wg sync.WaitGroup
+	ch := make(chan int, 1)
+
+	go producer(ch)
+	for i := 1; i < 4; i++ {
+		wg.Add(1)
+		go consumer(i, ch, &wg)
+	}
+
+	wg.Wait()
+
 }
