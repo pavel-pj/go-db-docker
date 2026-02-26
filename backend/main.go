@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -21,6 +20,70 @@ type SendResult struct {
 	ID        int
 	Delivered bool
 }
+
+func SendNotifications(messages []Message, limit int) []SendResult {
+
+	result := make([]SendResult, len(messages))
+	if limit <= 0 {
+		for i, msg := range messages {
+			result[i] = SendResult{
+				ID:        msg.ID,
+				Delivered: false,
+			}
+		}
+		return result
+	}
+
+	sem := make(chan struct{}, limit)
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+
+	for i, msg := range messages {
+		wg.Add(1)
+		go func(index int, m Message) {
+			defer wg.Done()
+
+			sem <- struct{}{}
+			defer func() { <-sem }()
+
+			mu.Lock()
+			res := send(m)
+			result[index] = SendResult{
+				ID:        m.ID,
+				Delivered: res,
+			}
+			mu.Unlock()
+
+		}(i, msg)
+	}
+
+	wg.Wait()
+
+	return result
+
+}
+
+func main() {
+	messages := []Message{
+		{ID: 1, Email: "ada@example.com", Subject: "hi", Body: "hello"},
+		{ID: 2, Email: "invalid", Subject: "hi", Body: "hello"},
+	}
+
+	results := SendNotifications(messages, 2)
+	fmt.Println(results)
+
+}
+
+func send(msg Message) bool {
+	_ = msg
+	// Simulate I/O latency.
+	time.Sleep(10 * time.Millisecond)
+	return strings.Contains(msg.Email, "@")
+}
+
+/*
+
+
 
 func SendNotifications(messages []Message, limit int) []SendResult {
 
@@ -78,7 +141,7 @@ func main() {
 	fmt.Println(results)
 }
 
-/*
+
 package notifier
 
 import (
