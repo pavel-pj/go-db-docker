@@ -3,202 +3,67 @@ package main
 import (
 	"fmt"
 	"strings"
-	"sync"
 	"time"
 )
 
-// Message represents a notification request.
-type Message struct {
-	ID      int
-	Email   string
-	Subject string
-	Body    string
+// Item represents an input unit.
+type Item struct {
+	ID    int
+	Value string
 }
 
-// SendResult represents a delivery result.
-type SendResult struct {
-	ID        int
-	Delivered bool
+// Result represents a processed item.
+type Result struct {
+	ID    int
+	Value string
 }
 
-func SendNotifications(messages []Message, limit int) []SendResult {
+type indexedResult struct {
+	Index  int
+	Result Result
+}
 
-	result := make([]SendResult, len(messages))
-	if limit <= 0 {
-		for i, msg := range messages {
-			result[i] = SendResult{
-				ID:        msg.ID,
-				Delivered: false,
+// ProcessItems processes items concurrently and returns results in input order.
+func ProcessItems(items []Item) []Result {
+	result := make([]Result, len(items))
+	ch := make(chan indexedResult, 3)
+
+	for idx, item := range items {
+
+		go func(index int, i Item) {
+
+			val := process(i.Value)
+			ch <- indexedResult{
+				Index:  index,
+				Result: Result{ID: i.ID, Value: val},
 			}
-		}
-		return result
+		}(idx, item)
 	}
 
-	sem := make(chan struct{}, limit)
-	var wg sync.WaitGroup
-	var mu sync.Mutex
+	for i := 0; i < len(items); i++ {
+		data := <-ch
+		result[data.Index] = data.Result
 
-	for i, msg := range messages {
-		wg.Add(1)
-		go func(index int, m Message) {
-			defer wg.Done()
-
-			sem <- struct{}{}
-			defer func() { <-sem }()
-
-			mu.Lock()
-			res := send(m)
-			result[index] = SendResult{
-				ID:        m.ID,
-				Delivered: res,
-			}
-			mu.Unlock()
-
-		}(i, msg)
 	}
-
-	wg.Wait()
-
+	close(ch)
 	return result
+}
 
+func process(value string) string {
+	_ = value
+	// Simulate work.
+	time.Sleep(5 * time.Millisecond)
+	return strings.ToUpper(strings.TrimSpace(value))
 }
 
 func main() {
-	messages := []Message{
-		{ID: 1, Email: "ada@example.com", Subject: "hi", Body: "hello"},
-		{ID: 2, Email: "invalid", Subject: "hi", Body: "hello"},
+
+	items := []Item{
+		{ID: 1, Value: "first"},
+		{ID: 2, Value: "second"},
+		{ID: 3, Value: "third"},
 	}
 
-	results := SendNotifications(messages, 2)
-	fmt.Println(results)
+	fmt.Println(ProcessItems(items))
 
 }
-
-func send(msg Message) bool {
-	_ = msg
-	// Simulate I/O latency.
-	time.Sleep(10 * time.Millisecond)
-	return strings.Contains(msg.Email, "@")
-}
-
-/*
-
-
-
-func SendNotifications(messages []Message, limit int) []SendResult {
-
-	if limit <= 0 {
-		return []SendResult{}
-	}
-
-	semaphore := make(chan struct{}, limit)
-	var result []SendResult
-
-	var mu sync.Mutex
-	var wg sync.WaitGroup
-
-	for _, msg := range messages {
-		wg.Add(1)
-		go func(m Message) {
-			defer wg.Done()
-			semaphore <- struct{}{}
-			defer func() { <-semaphore }()
-
-			res := send(m)
-			mu.Lock()
-			result = append(result, SendResult{
-				ID:        m.ID,
-				Delivered: res,
-			})
-			mu.Unlock()
-
-		}(msg)
-	}
-
-	wg.Wait()
-
-	sort.Slice(result, func(i, j int) bool {
-		return result[i].ID < result[j].ID
-	})
-	return result
-
-}
-
-func send(msg Message) bool {
-	_ = msg
-	// Simulate I/O latency.
-	time.Sleep(10 * time.Millisecond)
-	return strings.Contains(msg.Email, "@")
-}
-
-func main() {
-	messages := []Message{
-		{ID: 1, Email: "ada@example.com", Subject: "hi", Body: "hello"},
-		{ID: 2, Email: "invalid", Subject: "hi", Body: "hello"},
-	}
-
-	results := SendNotifications(messages, 1)
-	fmt.Println(results)
-}
-
-
-package notifier
-
-import (
-	"strings"
-	"sync"
-	"time"
-)
-
-// Message represents a notification request.
-type Message struct {
-	ID      int
-	Email   string
-	Subject string
-	Body    string
-}
-
-// SendResult represents a delivery result.
-type SendResult struct {
-	ID        int
-	Delivered bool
-}
-
-// BEGIN
-// SendNotifications sends messages with limited parallelism and returns results in input order.
-func SendNotifications(messages []Message, limit int) []SendResult {
-	results := make([]SendResult, len(messages))
-	if limit <= 0 {
-		for i, msg := range messages {
-			results[i] = SendResult{ID: msg.ID, Delivered: false}
-		}
-		return results
-	}
-
-	sem := make(chan struct{}, limit)
-	var wg sync.WaitGroup
-	wg.Add(len(messages))
-
-	for i, msg := range messages {
-		go func(idx int, m Message) {
-			defer wg.Done()
-			sem <- struct{}{}
-			delivered := send(m)
-			<-sem
-
-			results[idx] = SendResult{ID: m.ID, Delivered: delivered}
-		}(i, msg)
-	}
-
-	wg.Wait()
-	return results
-}
-// END
-
-func send(msg Message) bool {
-	_ = msg
-	// Simulate I/O latency.
-	time.Sleep(10 * time.Millisecond)
-	return strings.Contains(msg.Email, "@")
-}
-*/
