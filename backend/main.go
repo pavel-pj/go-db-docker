@@ -1,37 +1,31 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"time"
 )
 
-func WaitFirst(left <-chan string, right <-chan string, timeout time.Duration) (string, bool) {
-
+func worker(ctx context.Context, id int) {
 	for {
 		select {
-		case data, ok := <-left:
-			if ok {
-				return data, true
-			}
-			return "", false
-		case data, ok := <-right:
-			if ok {
-				return data, true
-			}
-			return "", false
-		case <-time.After(timeout):
-			return "", false
+		case <-ctx.Done(): // сигнал отмены или дедлайна
+			fmt.Println("worker", id, "остановлен:", ctx.Err())
+			return // корректное завершение горутины
+		default:
+			fmt.Println("worker", id, "работает")
+			time.Sleep(100 * time.Millisecond) // имитация полезной работы
 		}
-
 	}
-
 }
 
 func main() {
-	left := make(chan string)
-	right := make(chan string)
+	// Контекст сам отменится через 2 секунды
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel() // ВСЕ РАВНО НУЖНО ВЫЗВАТЬ! (освобождает ресурсы)
 
-	_, ok := WaitFirst(left, right, 5*time.Millisecond)
-	fmt.Println(ok)
+	go worker(ctx, 1)
 
+	// Можно даже не вызывать cancel() вручную - таймаут сработает сам
+	time.Sleep(3 * time.Second)
 }
