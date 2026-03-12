@@ -3,31 +3,35 @@ package main
 import (
 	"context"
 	"fmt"
+	"os"
+	"os/signal"
+	"syscall"
 	"time"
 )
 
-func worker(ctx context.Context, id int) {
+func worker(ctx context.Context) {
 	for {
 		select {
-		case <-ctx.Done():
-			fmt.Println("worker:", id, "завершил работу")
+		case <-ctx.Done(): // сигнал от системы или отмены
+			fmt.Println("завершение воркера:", ctx.Err())
 			return
 		default:
-			fmt.Println("worker:", id, "Работает")
-			time.Sleep(100 * time.Millisecond)
+			fmt.Println("фонова работа")
+			time.Sleep(150 * time.Millisecond)
 		}
 	}
 }
 
 func main() {
-	ctx, cancel := context.WithCancel(context.Background())
 
-	for i := 1; i < 5; i++ {
-		go worker(ctx, i)
-	}
+	ctx, cancel := signal.NotifyContext(
+		context.Background(),
+		os.Interrupt,
+		syscall.SIGTERM,
+	)
+	defer cancel()
 
-	time.Sleep(2 * time.Second)
-	cancel()
-	time.Sleep(200 * time.Millisecond)
+	go worker(ctx)
+	time.Sleep(10 * time.Second)
 
 }
