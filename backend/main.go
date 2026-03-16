@@ -1,82 +1,79 @@
 package main
 
 import (
-	"context"
 	"fmt"
-	"strings"
+	"strconv"
+	"sync"
 	"time"
 )
 
-// Job represents a unit of work.
 type Job struct {
-	ID   int
-	Text string
+	ID  int
+	Val string
 }
 
-// Result represents a processed job.
 type Result struct {
 	ID     int
 	Output string
+	Err    error
 }
 
-// ProcessJobs processes jobs concurrently and stops when the context is done.
-func ProcessJobs(ctx context.Context, jobs []Job) []Result {
+func worker(id int, jobs <-chan Job, result chan<- Result, wg *sync.WaitGroup) {
+	defer wg.Done()
 
-	ch := make(chan Result, len(jobs))
-
-	for _, v := range jobs {
-
-		go func(ctx context.Context, value Job) {
-
-			select {
-			case <-ctx.Done():
-				return
-			default:
-				result := process(value.Text)
-				ch <- Result{
-					ID:     value.ID,
-					Output: result,
-				}
-			}
-
-		}(ctx, v)
-
-	}
-
-	results := make([]Result, len(jobs))
-
-	for i := 0; i < len(jobs); i++ {
-		select {
-		case <-ctx.Done():
-			return results[:i]
-		case res := <-ch:
-			results[i] = res
+	for val := range jobs {
+		time.Sleep(100 * time.Millisecond)
+		fmt.Println("Worker:", id, "Запись ID:", val.ID)
+		result <- Result{
+			ID:     val.ID,
+			Output: val.Val,
+			Err:    nil,
 		}
 	}
 
-	return results
-
-}
-
-func process(text string) string {
-	// Simulate work.
-	time.Sleep(10 * time.Millisecond)
-	return strings.ToUpper(strings.TrimSpace(text))
 }
 
 func main() {
+	var wg sync.WaitGroup
+	workers := 4
 
-	jobs := []Job{
-		{ID: 1, Text: "first"},
-		{ID: 2, Text: "second"},
-		{ID: 3, Text: "third"},
+	jobs := make(chan Job, 16)
+	results := make(chan Result, 16)
+
+	wg.Add(workers)
+	for i := 0; i < workers; i++ {
+		go worker(i, jobs, results, &wg)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	go func() {
+		for x := 0; x < 45; x++ {
+			jobs <- Job{
+				ID:  x,
+				Val: fmt.Sprintf("Значение Задачи : %s", strconv.Itoa(x)),
+			}
+		}
+		close(jobs)
+	}()
 
-	defer cancel()
+	var resultWg sync.WaitGroup
+	resultInfo := []Result{}
 
-	results := ProcessJobs(ctx, jobs)
-	fmt.Println(results)
+	resultWg.Add(1)
+
+	go func() {
+		defer resultWg.Done()
+		for res := range results {
+			resultInfo = append(resultInfo, res)
+		}
+	}()
+
+	wg.Wait()
+	close(results)
+	resultWg.Wait()
+
+	fmt.Println("\n=== ВСЕ РЕЗУЛЬТАТЫ ===")
+	for _, res := range resultInfo {
+		fmt.Printf("РЕЗУЛЬТАТ: id: %02d, Значение : %s\n", res.ID, res.Output)
+	}
 
 }
