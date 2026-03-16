@@ -1,15 +1,27 @@
 package main
 
-import "fmt"
+import (
+	"context"
+	"fmt"
+	"time"
+)
 
-func get(nums ...int) <-chan int {
+func get(ctx context.Context, nums ...int) <-chan int {
 
 	out := make(chan int)
 
 	go func() {
 		defer close(out)
 		for _, n := range nums {
-			out <- n
+
+			select {
+			case <-ctx.Done():
+				fmt.Println("Отмена контекста в nums")
+				return
+			default:
+				out <- n
+			}
+
 		}
 	}()
 
@@ -17,26 +29,38 @@ func get(nums ...int) <-chan int {
 
 }
 
-func getSquares(in <-chan int) <-chan int {
+func getSquares(ctx context.Context, in <-chan int) <-chan int {
 	out := make(chan int)
 
 	go func() {
 		defer close(out)
 		for val := range in {
-			out <- val * val
+			select {
+			case <-ctx.Done():
+				fmt.Println("Отмена контекста в squares")
+				return
+			default:
+				out <- val * val
+			}
 		}
 	}()
 
 	return out
 }
 
-func double(in <-chan int) <-chan int {
+func double(ctx context.Context, in <-chan int) <-chan int {
 	out := make(chan int)
 
 	go func() {
 		defer close(out)
 		for v := range in {
-			out <- v * 2
+			select {
+			case <-ctx.Done():
+				fmt.Println("Отмена контекста в double")
+				return
+			default:
+				out <- v * 2
+			}
 		}
 	}()
 
@@ -45,9 +69,11 @@ func double(in <-chan int) <-chan int {
 
 func main() {
 
-	nums := get(1, 2, 3, 4, 5)
-	squares := getSquares(nums)
-	dbl := double(squares)
+	ctx, _ := context.WithTimeout(context.Background(), 100000*time.Nanosecond)
+	nums := get(ctx, 1, 2, 3, 4, 5)
+	squares := getSquares(ctx, nums)
+	//cancel()
+	dbl := double(ctx, squares)
 
 	for v := range dbl {
 		fmt.Println(v)
