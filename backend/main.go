@@ -1,82 +1,97 @@
 package main
 
 import (
-	"context"
 	"fmt"
-	"time"
+	"sort"
+	"strings"
 )
 
-func get(ctx context.Context, nums ...int) <-chan int {
+type indexedLine struct {
+	Index int
+	Line  string
+}
 
-	out := make(chan int)
+// ProcessLogs normalizes lines using a simple pipeline and returns results in order.
+func ProcessLogs(lines []string) []string {
+	var out []string
+
+	in := make(chan indexedLine)
+
+	normal := normalize(in)
+	filtered := filterEmpty(normal)
+
+	go func() {
+		for i, l := range lines {
+
+			in <- indexedLine{
+				Index: i,
+				Line:  l,
+			}
+		}
+		close(in)
+	}()
+
+	var results []indexedLine
+
+	for v := range filtered {
+		results = append(results, v)
+	}
+
+	sort.Slice(results, func(i, j int) bool {
+		return results[i].Index < results[j].Index
+	})
+
+	for _, v := range results {
+		fmt.Println("Добавляем : ", v.Line)
+		out = append(out, v.Line)
+	}
+
+	for i, l := range out {
+		fmt.Println(i, " Значение:", l)
+		fmt.Println(len(out))
+	}
+
+	return out
+}
+
+func normalize(in <-chan indexedLine) <-chan indexedLine {
+	out := make(chan indexedLine)
 
 	go func() {
 		defer close(out)
-		for _, n := range nums {
+		for value := range in {
 
-			select {
-			case <-ctx.Done():
-				fmt.Println("Отмена контекста в nums")
-				return
-			default:
-				out <- n
+			//fmt.Println("normalize in, val:", value)
+			res := strings.ToLower(strings.TrimSpace(value.Line))
+			out <- indexedLine{
+				Index: value.Index,
+				Line:  res,
 			}
-
 		}
 	}()
 
 	return out
-
 }
 
-func getSquares(ctx context.Context, in <-chan int) <-chan int {
-	out := make(chan int)
+func filterEmpty(in <-chan indexedLine) <-chan indexedLine {
+	out := make(chan indexedLine)
 
 	go func() {
 		defer close(out)
-		for val := range in {
-			select {
-			case <-ctx.Done():
-				fmt.Println("Отмена контекста в squares")
-				return
-			default:
-				out <- val * val
+		for value := range in {
+			if value.Line != "" {
+				fmt.Println("empty in, val:", value)
+				out <- value
 			}
 		}
-	}()
 
-	return out
-}
-
-func double(ctx context.Context, in <-chan int) <-chan int {
-	out := make(chan int)
-
-	go func() {
-		defer close(out)
-		for v := range in {
-			select {
-			case <-ctx.Done():
-				fmt.Println("Отмена контекста в double")
-				return
-			default:
-				out <- v * 2
-			}
-		}
 	}()
 
 	return out
 }
 
 func main() {
-
-	ctx, _ := context.WithTimeout(context.Background(), 100000*time.Nanosecond)
-	nums := get(ctx, 1, 2, 3, 4, 5)
-	squares := getSquares(ctx, nums)
-	//cancel()
-	dbl := double(ctx, squares)
-
-	for v := range dbl {
-		fmt.Println(v)
-	}
+	lines := []string{"INFO: Started  ", "", " WARN: Disk FULL ", "error: failed"}
+	fmt.Println(ProcessLogs(lines))
 
 }
