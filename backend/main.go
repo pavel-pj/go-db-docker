@@ -1,97 +1,97 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
+	"sync"
 )
 
-type indexedLine struct {
-	Index int
-	Line  string
+// Task represents input data.
+type Task struct {
+	ID   int
+	Text string
 }
 
-// ProcessLogs normalizes lines using a simple pipeline and returns results in order.
-func ProcessLogs(lines []string) []string {
-	var out []string
+// Result represents processed data.
+type Result struct {
+	ID     int
+	Output string
+}
 
-	in := make(chan indexedLine)
+var ErrEmptyText = errors.New("empty text")
 
-	normal := normalize(in)
-	filtered := filterEmpty(normal)
+// ProcessTasks processes tasks concurrently and returns an error if any task fails.
+func ProcessTasks(tasks []Task) ([]Result, error) {
+	results := make([]Result, len(tasks))
+	errs := make(chan error, len(tasks))
+
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+
+	for idx, t := range tasks {
+		wg.Add(1)
+		go func(val Task) {
+			defer wg.Done()
+
+			res, err := process(t.Text)
+			if err != nil {
+				errs <- err
+			}
+			mu.Lock()
+			results[idx] = Result{
+				ID:     t.ID,
+				Output: res,
+			}
+			mu.Unlock()
+
+		}(t)
+
+	}
 
 	go func() {
-		for i, l := range lines {
-
-			in <- indexedLine{
-				Index: i,
-				Line:  l,
-			}
-		}
-		close(in)
+		wg.Wait()
+		close(errs)
 	}()
 
-	var results []indexedLine
+	// Ждем все ошибки
+	var firstErr error
+	for err := range errs {
+		if firstErr == nil {
+			firstErr = err
+		}
+	}
 
-	for v := range filtered {
-		results = append(results, v)
+	// ТЕПЕРЬ сортируем (после того как все данные собраны)
+	if firstErr != nil {
+		return nil, firstErr
 	}
 
 	sort.Slice(results, func(i, j int) bool {
-		return results[i].Index < results[j].Index
+		return results[i].ID < results[j].ID
 	})
 
-	for _, v := range results {
-		fmt.Println("Добавляем : ", v.Line)
-		out = append(out, v.Line)
-	}
-
-	for i, l := range out {
-		fmt.Println(i, " Значение:", l)
-		fmt.Println(len(out))
-	}
-
-	return out
+	return results, nil
 }
 
-func normalize(in <-chan indexedLine) <-chan indexedLine {
-	out := make(chan indexedLine)
-
-	go func() {
-		defer close(out)
-		for value := range in {
-
-			//fmt.Println("normalize in, val:", value)
-			res := strings.ToLower(strings.TrimSpace(value.Line))
-			out <- indexedLine{
-				Index: value.Index,
-				Line:  res,
-			}
-		}
-	}()
-
-	return out
-}
-
-func filterEmpty(in <-chan indexedLine) <-chan indexedLine {
-	out := make(chan indexedLine)
-
-	go func() {
-		defer close(out)
-		for value := range in {
-			if value.Line != "" {
-				fmt.Println("empty in, val:", value)
-				out <- value
-			}
-		}
-
-	}()
-
-	return out
+func process(text string) (string, error) {
+	value := strings.TrimSpace(text)
+	if value == "" {
+		return "", ErrEmptyText
+	}
+	return strings.ToUpper(value), nil
 }
 
 func main() {
-	lines := []string{"INFO: Started  ", "", " WARN: Disk FULL ", "error: failed"}
-	fmt.Println(ProcessLogs(lines))
+	tasks := []Task{
+		{ID: 1, Text: "first"},
+		{ID: 2, Text: "second"},
+		{ID: 3, Text: "third"},
+	}
+
+	results, err := ProcessTasks(tasks)
+
+	fmt.Println(results, err)
 
 }
