@@ -1,97 +1,54 @@
 package main
 
 import (
-	"errors"
 	"fmt"
-	"sort"
-	"strings"
 	"sync"
+	"time"
 )
 
-// Task represents input data.
-type Task struct {
-	ID   int
-	Text string
+func worker(id int, jobs <-chan int, results chan<- int) {
+
+	time.Sleep(100 * time.Millisecond)
+	for job := range jobs {
+		result := job * 2
+		results <- result
+		fmt.Println("worker :", id, "job:", job, "result:", result)
+	}
+
 }
 
-// Result represents processed data.
-type Result struct {
-	ID     int
-	Output string
-}
-
-var ErrEmptyText = errors.New("empty text")
-
-// ProcessTasks processes tasks concurrently and returns an error if any task fails.
-func ProcessTasks(tasks []Task) ([]Result, error) {
-	results := make([]Result, len(tasks))
-	errs := make(chan error, len(tasks))
+func main() {
 
 	var wg sync.WaitGroup
-	var mu sync.Mutex
+	limit := 10
+	jobs := make(chan int)
+	results := make(chan int)
 
-	for idx, t := range tasks {
+	for i := 0; i < limit; i++ {
 		wg.Add(1)
-		go func(val Task) {
+
+		go func(id int) {
 			defer wg.Done()
-
-			res, err := process(t.Text)
-			if err != nil {
-				errs <- err
-			}
-			mu.Lock()
-			results[idx] = Result{
-				ID:     t.ID,
-				Output: res,
-			}
-			mu.Unlock()
-
-		}(t)
+			worker(id, jobs, results)
+		}(i)
 
 	}
 
 	go func() {
-		wg.Wait()
-		close(errs)
+
+		for x := 0; x < 100; x++ {
+			jobs <- x
+		}
+		close(jobs)
 	}()
 
-	// Ждем все ошибки
-	var firstErr error
-	for err := range errs {
-		if firstErr == nil {
-			firstErr = err
-		}
+	go func() {
+		wg.Wait()
+		close(results)
+	}()
+
+	for result := range results {
+		fmt.Println("RESULT:", result)
 	}
-
-	// ТЕПЕРЬ сортируем (после того как все данные собраны)
-	if firstErr != nil {
-		return nil, firstErr
-	}
-
-	sort.Slice(results, func(i, j int) bool {
-		return results[i].ID < results[j].ID
-	})
-
-	return results, nil
-}
-
-func process(text string) (string, error) {
-	value := strings.TrimSpace(text)
-	if value == "" {
-		return "", ErrEmptyText
-	}
-	return strings.ToUpper(value), nil
-}
-
-func main() {
-	tasks := []Task{
-		{ID: 1, Text: "first"},
-		{ID: 2, Text: "second"},
-		{ID: 3, Text: "third"},
-	}
-
-	results, err := ProcessTasks(tasks)
-
-	fmt.Println(results, err)
 
 }
