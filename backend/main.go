@@ -2,27 +2,31 @@ package main
 
 import (
 	"fmt"
-	"sync"
-	"sync/atomic"
+	"time"
 )
 
-var counter int64
-var wg sync.WaitGroup
-
-func main() {
-
-	for x := 0; x < 100; x++ {
-		wg.Add(1)
-		go func(idx int) {
-			defer wg.Done()
-			for i := 0; i < 10000; i++ {
-				atomic.AddInt64(&counter, 1)
-				fmt.Println(atomic.LoadInt64(&counter))
-			}
-		}(x)
+func WaitFirst(left <-chan string, right <-chan string, timeout time.Duration) (string, bool) {
+	select {
+	case a := <-left:
+		return a, true
+	case b := <-right:
+		return b, true
+	case <-time.After(timeout):
+		return "", false
 	}
 
-	wg.Wait()
-	fmt.Println("total:", atomic.LoadInt64(&counter))
+}
 
+func main() {
+	// BRANCH DEV
+	left := make(chan string)
+	right := make(chan string)
+
+	go func() {
+		time.Sleep(10 * time.Millisecond)
+		left <- "left"
+	}()
+
+	value, ok := WaitFirst(left, right, 50*time.Millisecond)
+	fmt.Println(value, ok) // left true
 }

@@ -16,6 +16,7 @@ services:
     build: ./backend
     ports:
       - "8100:8100"   
+      - "6060:6060"        
     environment:
       DB_HOST: postgres
       DB_PORT: 5432
